@@ -1,7 +1,9 @@
 // Cloudinary Upload Utility for Unsigned Uploads
 // Cloud Name: vjqnrvyr
 // Upload Preset: freshers_upload
-// API Endpoint: https://api.cloudinary.com/v1_1/vjqnrvyr/auto/upload
+// Endpoints:
+// - Images: https://api.cloudinary.com/v1_1/vjqnrvyr/image/upload
+// - Videos: https://api.cloudinary.com/v1_1/vjqnrvyr/video/upload
 
 export interface UploadOptions {
   onProgress?: (progressPercent: number) => void;
@@ -17,14 +19,17 @@ export const uploadToCloudinary = async (
   file: File,
   options?: UploadOptions
 ): Promise<string> => {
+  const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(file.name);
+  const resourceType = isVideo ? 'video' : 'image';
+  const targetUrl = `https://api.cloudinary.com/v1_1/vjqnrvyr/${resourceType}/upload`;
+
   const formData = new FormData();
   formData.append('file', file);
   formData.append('upload_preset', 'freshers_upload');
+  formData.append('resource_type', resourceType);
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    const targetUrl = 'https://api.cloudinary.com/v1_1/vjqnrvyr/auto/upload';
-    
     xhr.open('POST', targetUrl);
 
     if (options?.onProgress && xhr.upload) {
@@ -41,7 +46,7 @@ export const uploadToCloudinary = async (
         try {
           const response = JSON.parse(xhr.responseText);
           if (response.secure_url) {
-            console.log('✅ Cloudinary Upload Success! secure_url:', response.secure_url);
+            console.log(`✅ Cloudinary ${resourceType.toUpperCase()} Upload Success! secure_url:`, response.secure_url);
             resolve(response.secure_url);
           } else {
             console.error('❌ Cloudinary Response Error: Missing secure_url in response payload:', response);
@@ -52,7 +57,7 @@ export const uploadToCloudinary = async (
           reject(new Error('Failed to parse Cloudinary response JSON'));
         }
       } else {
-        console.error(`❌ Cloudinary Upload Failed with HTTP status ${xhr.status}:`, xhr.responseText);
+        console.error(`❌ Cloudinary ${resourceType} Upload Failed with HTTP status ${xhr.status}:`, xhr.responseText);
         reject(new Error(`Cloudinary upload failed with HTTP status ${xhr.status}`));
       }
     };
