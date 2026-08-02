@@ -2,7 +2,6 @@ import type { LogoItem, MovieItem } from '../types';
 
 const LOGOS_STORAGE_KEY = 'freshers_arena_cloud_logos';
 const MOVIES_STORAGE_KEY = 'freshers_arena_cloud_movies';
-const KVDB_BASE = 'https://kvdb.io/freshers_arena_v1_prod_key';
 
 // Helper: Local Storage JSON caching
 const getCachedLogos = (): LogoItem[] => {
@@ -39,23 +38,6 @@ const setCachedMovies = (movies: MovieItem[]) => {
   }
 };
 
-// Fallback direct cloud fetch for static deployments
-const fetchDirectCloud = async (key: 'logos' | 'movies'): Promise<any[]> => {
-  try {
-    const res = await fetch(`${KVDB_BASE}/${key}`);
-    if (res.ok) {
-      const text = await res.text();
-      if (text) {
-        const data = JSON.parse(text);
-        if (Array.isArray(data)) return data;
-      }
-    }
-  } catch (err) {
-    console.warn(`Direct cloud fetch failed for ${key}:`, err);
-  }
-  return [];
-};
-
 // ==========================================
 // LOGO STORAGE OPERATIONS (CLOUD & DATABASE)
 // ==========================================
@@ -65,26 +47,36 @@ export const getAllLogos = async (): Promise<LogoItem[]> => {
     const res = await fetch('/api/logos');
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         setCachedLogos(data);
         return data;
       }
     }
   } catch (err) {
-    console.warn('Failed to fetch logos from backend API, checking direct cloud store:', err);
+    console.warn('Failed to fetch logos from backend API:', err);
   }
 
-  // Fail-safe direct cloud store check for static environments
-  const cloudItems = await fetchDirectCloud('logos');
-  if (cloudItems && cloudItems.length > 0) {
-    setCachedLogos(cloudItems);
-    return cloudItems;
-  }
-
+  // Fallback to local cache only if API network request completely failed
   return getCachedLogos();
 };
 
 export const saveLogo = async (logo: LogoItem): Promise<string> => {
+  const res = await fetch('/api/logos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(logo),
+  });
+
+  if (!res.ok) {
+    let errMessage = `Failed to save logo to database (HTTP ${res.status})`;
+    try {
+      const body = await res.json();
+      if (body.error) errMessage = body.error;
+    } catch {}
+    throw new Error(errMessage);
+  }
+
+  // Update local cache only AFTER database confirms persistence
   const current = getCachedLogos();
   const existingIdx = current.findIndex((item) => item.id === logo.id);
   let updated: LogoItem[];
@@ -96,66 +88,37 @@ export const saveLogo = async (logo: LogoItem): Promise<string> => {
   }
   setCachedLogos(updated);
 
-  try {
-    const res = await fetch('/api/logos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(logo),
-    });
-    if (!res.ok) {
-      console.warn(`Backend save logo returned status ${res.status}`);
-    }
-  } catch (err) {
-    console.warn('Network error saving logo via backend API, writing to cloud fallback:', err);
-    try {
-      await fetch(`${KVDB_BASE}/logos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated),
-      });
-    } catch {}
-  }
-
   return logo.id;
 };
 
 export const deleteLogo = async (id: string): Promise<void> => {
+  const res = await fetch(`/api/logos?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!res.ok) {
+    let errMessage = `Failed to delete logo (HTTP ${res.status})`;
+    try {
+      const body = await res.json();
+      if (body.error) errMessage = body.error;
+    } catch {}
+    throw new Error(errMessage);
+  }
+
   const current = getCachedLogos().filter((l) => l.id !== id);
   setCachedLogos(current);
-
-  try {
-    const res = await fetch(`/api/logos?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-    if (!res.ok) {
-      console.warn(`Backend delete logo returned status ${res.status}`);
-    }
-  } catch (err) {
-    console.warn('Network error deleting logo via backend API:', err);
-    try {
-      await fetch(`${KVDB_BASE}/logos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(current),
-      });
-    } catch {}
-  }
 };
 
 export const saveLogosOrder = async (logos: LogoItem[]): Promise<void> => {
   const ordered = logos.map((item, idx) => ({ ...item, order: idx }));
-  setCachedLogos(ordered);
+  const res = await fetch('/api/logos', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: ordered }),
+  });
 
-  try {
-    const res = await fetch('/api/logos', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: ordered }),
-    });
-    if (!res.ok) {
-      console.warn(`Failed to save logo order via API (HTTP ${res.status})`);
-    }
-  } catch (err) {
-    console.warn('Network error saving logo order:', err);
+  if (!res.ok) {
+    throw new Error(`Failed to save logo order to database (HTTP ${res.status})`);
   }
+
+  setCachedLogos(ordered);
 };
 
 // ==========================================
@@ -167,25 +130,34 @@ export const getAllMovies = async (): Promise<MovieItem[]> => {
     const res = await fetch('/api/movies');
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         setCachedMovies(data);
         return data;
       }
     }
   } catch (err) {
-    console.warn('Failed to fetch movies from backend API, checking direct cloud store:', err);
-  }
-
-  const cloudItems = await fetchDirectCloud('movies');
-  if (cloudItems && cloudItems.length > 0) {
-    setCachedMovies(cloudItems);
-    return cloudItems;
+    console.warn('Failed to fetch movies from backend API:', err);
   }
 
   return getCachedMovies();
 };
 
 export const saveMovie = async (movie: MovieItem): Promise<string> => {
+  const res = await fetch('/api/movies', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(movie),
+  });
+
+  if (!res.ok) {
+    let errMessage = `Failed to save movie to database (HTTP ${res.status})`;
+    try {
+      const body = await res.json();
+      if (body.error) errMessage = body.error;
+    } catch {}
+    throw new Error(errMessage);
+  }
+
   const current = getCachedMovies();
   const existingIdx = current.findIndex((item) => item.id === movie.id);
   let updated: MovieItem[];
@@ -197,64 +169,35 @@ export const saveMovie = async (movie: MovieItem): Promise<string> => {
   }
   setCachedMovies(updated);
 
-  try {
-    const res = await fetch('/api/movies', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(movie),
-    });
-    if (!res.ok) {
-      console.warn(`Backend save movie returned status ${res.status}`);
-    }
-  } catch (err) {
-    console.warn('Network error saving movie via backend API, writing to cloud fallback:', err);
-    try {
-      await fetch(`${KVDB_BASE}/movies`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated),
-      });
-    } catch {}
-  }
-
   return movie.id;
 };
 
 export const deleteMovie = async (id: string): Promise<void> => {
+  const res = await fetch(`/api/movies?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!res.ok) {
+    let errMessage = `Failed to delete movie (HTTP ${res.status})`;
+    try {
+      const body = await res.json();
+      if (body.error) errMessage = body.error;
+    } catch {}
+    throw new Error(errMessage);
+  }
+
   const current = getCachedMovies().filter((m) => m.id !== id);
   setCachedMovies(current);
-
-  try {
-    const res = await fetch(`/api/movies?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-    if (!res.ok) {
-      console.warn(`Backend delete movie returned status ${res.status}`);
-    }
-  } catch (err) {
-    console.warn('Network error deleting movie via backend API:', err);
-    try {
-      await fetch(`${KVDB_BASE}/movies`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(current),
-      });
-    } catch {}
-  }
 };
 
 export const saveMoviesOrder = async (movies: MovieItem[]): Promise<void> => {
   const ordered = movies.map((item, idx) => ({ ...item, order: idx }));
-  setCachedMovies(ordered);
+  const res = await fetch('/api/movies', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: ordered }),
+  });
 
-  try {
-    const res = await fetch('/api/movies', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: ordered }),
-    });
-    if (!res.ok) {
-      console.warn(`Failed to save movie order via API (HTTP ${res.status})`);
-    }
-  } catch (err) {
-    console.warn('Network error saving movie order:', err);
+  if (!res.ok) {
+    throw new Error(`Failed to save movie order to database (HTTP ${res.status})`);
   }
+
+  setCachedMovies(ordered);
 };
