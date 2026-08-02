@@ -3,7 +3,8 @@ import { Button, Input, SearchInput, Dialog, ToastContainer, type ToastMessage }
 import { saveLogo, deleteLogo } from '../../storage/db';
 import type { LogoItem } from '../../types';
 import { generateId } from '../../utils/helpers';
-import { FiUploadCloud, FiTrash2, FiEdit2, FiEye, FiFolderPlus, FiPlus, FiCheck, FiX, FiImage } from 'react-icons/fi';
+import { uploadToCloudinary } from '../../utils/cloudinary';
+import { FiUploadCloud, FiTrash2, FiEdit2, FiEye, FiFolderPlus, FiPlus, FiCheck, FiX, FiImage, FiLoader } from 'react-icons/fi';
 
 export interface LogoManagerProps {
   logos: LogoItem[];
@@ -17,7 +18,9 @@ export const LogoManager: React.FC<LogoManagerProps> = ({ logos, onRefresh }) =>
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [uploadStatusText, setUploadStatusText] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -31,17 +34,7 @@ export const LogoManager: React.FC<LogoManagerProps> = ({ logos, onRefresh }) =>
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Helper to read File as Base64 data URL
-  const readFileAsDataURL = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // Process files (single, multi, or folder)
+  // Process files: Upload directly to Cloudinary -> Save Metadata to MongoDB Atlas
   const processFiles = async (files: FileList | File[]) => {
     const fileArray = Array.from(files).filter((file) => file.type.startsWith('image/'));
     if (fileArray.length === 0) {
@@ -49,34 +42,64 @@ export const LogoManager: React.FC<LogoManagerProps> = ({ logos, onRefresh }) =>
       return;
     }
 
-    setIsProcessing(true);
+    setIsUploading(true);
+    setUploadProgress(0);
     let importedCount = 0;
+    let failedCount = 0;
 
     try {
-      for (const file of fileArray) {
-        const dataUrl = await readFileAsDataURL(file);
-        // Extract clean name from filename (e.g. google_logo.png -> Google Logo)
+      for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i];
         const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
         const cleanName = nameWithoutExt.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
-        const newLogo: LogoItem = {
-          id: generateId(),
-          name: cleanName,
-          imageData: dataUrl,
-          createdAt: Date.now(),
-        };
+        setUploadStatusText(`Uploading ${i + 1}/${fileArray.length}: "${file.name}" to Cloudinary...`);
 
-        await saveLogo(newLogo);
-        importedCount++;
+        try {
+          // 1. Upload file to Cloudinary -> get permanent secure_url
+          const secureUrl = await uploadToCloudinary(file, {
+            onProgress: (percent) => {
+              const totalPercent = Math.round(((i + percent / 100) / fileArray.length) * 100);
+              setUploadProgress(totalPercent);
+            },
+          });
+
+          // 2. Save metadata + secure_url to MongoDB Atlas
+          const newLogo: LogoItem = {
+            id: generateId(),
+            name: cleanName,
+            imageData: secureUrl, // Cloudinary permanent HTTPS URL
+            order: logos.length + importedCount,
+            createdAt: Date.now() + i,
+          };
+
+          await saveLogo(newLogo);
+          importedCount++;
+        } catch (uploadErr) {
+          console.error(`Failed to upload ${file.name} to Cloudinary:`, uploadErr);
+          failedCount++;
+        }
       }
 
-      addToast('success', 'Logos Imported Successfully', `Added ${importedCount} logo(s) to IndexedDB.`);
-      onRefresh();
+      if (importedCount > 0) {
+        addToast(
+          'success',
+          'Cloudinary Upload Complete',
+          `Successfully uploaded ${importedCount} logo(s) to Cloudinary & MongoDB Atlas.`
+        );
+        onRefresh();
+      }
+
+      if (failedCount > 0) {
+        addToast('error', 'Upload Errors Encountered', `${failedCount} file(s) failed to upload to Cloudinary.`);
+      }
     } catch (err) {
-      console.error('Failed to import logos:', err);
-      addToast('error', 'Import Failed', 'An error occurred while saving logos to IndexedDB.');
+      console.error('Failed processing logo uploads:', err);
+      addToast('error', 'Upload Failed', 'An error occurred during Cloudinary upload.');
     } finally {
-      setIsProcessing(false);
+      setIsUploading(false);
+      setUploadProgress(0);
+      setUploadStatusText('');
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (folderInputRef.current) folderInputRef.current.value = '';
     }
@@ -121,7 +144,7 @@ export const LogoManager: React.FC<LogoManagerProps> = ({ logos, onRefresh }) =>
     try {
       const updated: LogoItem = { ...logo, name: editingName.trim() };
       await saveLogo(updated);
-      addToast('success', 'Logo Renamed', `Updated to "${editingName.trim()}"`);
+      addToast('success', 'Logo Renamed', `Updated to "${editingName.trim()}" in MongoDB.`);
       setEditingId(null);
       onRefresh();
     } catch (err) {
@@ -130,11 +153,11 @@ export const LogoManager: React.FC<LogoManagerProps> = ({ logos, onRefresh }) =>
     }
   };
 
-  // Delete Logo
+  // Delete Logo from MongoDB Atlas
   const handleDelete = async (id: string, name: string) => {
     try {
       await deleteLogo(id);
-      addToast('info', 'Logo Deleted', `Removed "${name}" from IndexedDB.`);
+      addToast('info', 'Logo Deleted', `Removed "${name}" from MongoDB Atlas.`);
       onRefresh();
     } catch (err) {
       console.error(err);
@@ -151,14 +174,14 @@ export const LogoManager: React.FC<LogoManagerProps> = ({ logos, onRefresh }) =>
     <div className="space-y-6">
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
-      {/* Header Actions & Import Controls */}
+      {/* Header Actions & Cloudinary Upload Controls */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
             <FiImage className="text-cyan-400" /> Logo Deck Manager ({logos.length})
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Import individual logo images or entire image folders. Stored 100% offline in IndexedDB.
+            Media stored permanently in <span className="text-cyan-300 font-mono font-bold">Cloudinary</span> • Metadata saved in <span className="text-purple-300 font-mono font-bold">MongoDB Atlas</span>.
           </p>
         </div>
 
@@ -184,24 +207,40 @@ export const LogoManager: React.FC<LogoManagerProps> = ({ logos, onRefresh }) =>
           <Button
             variant="neon-blue"
             size="sm"
-            leftIcon={<FiPlus />}
-            isLoading={isProcessing}
+            leftIcon={isUploading ? <FiLoader className="animate-spin" /> : <FiPlus />}
+            isLoading={isUploading}
             onClick={() => fileInputRef.current?.click()}
           >
-            Add Logo Files
+            Upload Logo Files
           </Button>
 
           <Button
             variant="glass"
             size="sm"
             leftIcon={<FiFolderPlus className="text-cyan-400" />}
-            isLoading={isProcessing}
+            isLoading={isUploading}
             onClick={() => folderInputRef.current?.click()}
           >
-            Import Logo Folder
+            Upload Logo Folder
           </Button>
         </div>
       </div>
+
+      {/* Realtime Upload Progress Bar Banner */}
+      {isUploading && (
+        <div className="bg-slate-900/90 border border-cyan-500/50 rounded-2xl p-4 space-y-2 backdrop-blur-xl shadow-[0_0_25px_rgba(0,240,255,0.2)]">
+          <div className="flex justify-between text-xs font-mono text-cyan-300">
+            <span>{uploadStatusText}</span>
+            <span>{uploadProgress}%</span>
+          </div>
+          <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+            <div
+              className="bg-gradient-to-r from-cyan-500 to-purple-500 h-full transition-all duration-300 rounded-full"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Interactive Drag & Drop Area */}
       <div
@@ -219,10 +258,10 @@ export const LogoManager: React.FC<LogoManagerProps> = ({ logos, onRefresh }) =>
           <FiUploadCloud className="w-7 h-7" />
         </div>
         <h3 className="text-sm font-bold text-slate-200">
-          Drag & Drop Logo Images or Folder Here
+          Drag & Drop Logos Here to Upload to Cloudinary
         </h3>
         <p className="text-xs text-slate-500 mt-1">
-          Supports PNG, JPG, WEBP, SVG files. Instant Base64 offline conversion.
+          Files upload directly to Cloudinary (<span className="font-mono text-cyan-400">vjqnrvyr</span>) and save to MongoDB Atlas.
         </p>
       </div>
 
@@ -244,9 +283,9 @@ export const LogoManager: React.FC<LogoManagerProps> = ({ logos, onRefresh }) =>
       {filteredLogos.length === 0 ? (
         <div className="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-12 text-center">
           <FiImage className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-          <h4 className="text-base font-bold text-slate-300">No Logos Found</h4>
+          <h4 className="text-base font-bold text-slate-300">No Logos Available</h4>
           <p className="text-xs text-slate-500 mt-1">
-            {searchQuery ? 'No logos match your search query.' : 'Click "Add Logo Files" or drop a folder above to populate the logo deck.'}
+            {searchQuery ? 'No logos match your search query.' : 'Click "Upload Logo Files" to upload images directly to Cloudinary & MongoDB Atlas.'}
           </p>
         </div>
       ) : (
@@ -256,7 +295,7 @@ export const LogoManager: React.FC<LogoManagerProps> = ({ logos, onRefresh }) =>
               key={logo.id}
               className="bg-slate-900 border border-slate-800 hover:border-cyan-500/50 rounded-2xl p-3 flex flex-col justify-between group transition-all duration-200"
             >
-              {/* Image Preview Box */}
+              {/* Cloudinary Image Preview Box */}
               <div
                 onClick={() => setPreviewLogo(logo)}
                 className="w-full h-36 rounded-xl bg-slate-950/80 border border-slate-800/60 p-2 flex items-center justify-center relative overflow-hidden cursor-pointer group-hover:border-cyan-500/30"
@@ -264,6 +303,7 @@ export const LogoManager: React.FC<LogoManagerProps> = ({ logos, onRefresh }) =>
                 <img
                   src={logo.imageData}
                   alt={logo.name}
+                  loading="lazy"
                   className="max-h-full max-w-full object-contain transition-transform duration-300 group-hover:scale-105"
                 />
                 <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
@@ -336,8 +376,10 @@ export const LogoManager: React.FC<LogoManagerProps> = ({ logos, onRefresh }) =>
               alt={previewLogo.name}
               className="max-h-[60vh] max-w-full object-contain drop-shadow-[0_0_25px_rgba(0,240,255,0.3)]"
             />
-            <div className="mt-4 flex items-center justify-between w-full pt-4 border-t border-slate-800 text-xs text-slate-400 font-mono">
-              <span>ID: {previewLogo.id}</span>
+            <div className="mt-4 flex flex-col sm:flex-row items-center justify-between w-full pt-4 border-t border-slate-800 text-xs text-slate-400 font-mono gap-2">
+              <span className="truncate max-w-xs text-cyan-400" title={previewLogo.imageData}>
+                CDN: {previewLogo.imageData}
+              </span>
               <span>Added: {new Date(previewLogo.createdAt).toLocaleString()}</span>
             </div>
           </div>

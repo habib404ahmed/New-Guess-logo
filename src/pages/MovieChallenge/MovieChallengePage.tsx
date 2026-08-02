@@ -22,6 +22,7 @@ export const MovieChallengePage: React.FC = () => {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const currentMovie = movies[currentIndex];
+  const nextMovie = movies[currentIndex + 1];
 
   // Replay video clip manually from host action
   const handleReplayClip = useCallback(async () => {
@@ -146,6 +147,11 @@ export const MovieChallengePage: React.FC = () => {
     <div className="relative min-h-screen w-full bg-[#02050e] flex flex-col justify-between p-6 overflow-hidden stage-grid ambient-bg select-none">
       <Particles count={25} />
 
+      {/* Hidden preloader for next question's Cloudinary video asset */}
+      {nextMovie?.videoData && (
+        <link rel="preload" as="video" href={nextMovie.videoData} />
+      )}
+
       {/* Lighting Spotlight */}
       <div className="absolute top-1/2 right-1/4 translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-purple-600/15 rounded-full blur-[180px] pointer-events-none" />
 
@@ -194,7 +200,7 @@ export const MovieChallengePage: React.FC = () => {
                   ref={videoRef}
                   src={currentMovie.videoData}
                   controls={false}
-                  preload="auto"
+                  preload="metadata"
                   onLoadedMetadata={() => {
                     if (videoRef.current) {
                       videoRef.current.pause();

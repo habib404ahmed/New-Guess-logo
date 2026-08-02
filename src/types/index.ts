@@ -1,20 +1,26 @@
-// Core type definitions for Freshers Challenge Arena
+// Core type definitions for Freshers Challenge Arena with Cloudinary & MongoDB Atlas Integration
 
 export interface LogoItem {
   id: string;
   name: string;
-  imageData: string; // Base64 data URL for offline storage
+  imageData: string; // Permanent Cloudinary secure_url
   category?: string;
   difficulty?: 'easy' | 'medium' | 'hard';
+  order?: number;
   createdAt: number;
 }
 
 export interface MovieItem {
   id: string;
   title: string;
-  videoData: string; // Base64 or Blob URL for offline storage
+  videoData: string; // Permanent Cloudinary secure_url
   dialogue: string;
   hint?: string;
+  category?: string;
+  difficulty?: 'easy' | 'medium' | 'hard';
+  order?: number;
+  timer?: number;
+  points?: number;
   createdAt: number;
 }
 
