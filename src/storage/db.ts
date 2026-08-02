@@ -59,18 +59,7 @@ export const getAllLogos = async (): Promise<LogoItem[]> => {
 };
 
 export const saveLogo = async (logo: LogoItem): Promise<string> => {
-  // Save to backend API
-  const res = await fetch('/api/logos', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(logo),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to save logo to database (HTTP ${res.status})`);
-  }
-
-  // Update local cache
+  // Update local cache immediately for instant UI responsiveness
   const current = getCachedLogos();
   const existingIdx = current.findIndex((item) => item.id === logo.id);
   let updated: LogoItem[];
@@ -82,32 +71,53 @@ export const saveLogo = async (logo: LogoItem): Promise<string> => {
   }
   setCachedLogos(updated);
 
+  try {
+    const res = await fetch('/api/logos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(logo),
+    });
+    if (!res.ok) {
+      console.warn(`Failed to persist logo to cloud database (HTTP ${res.status})`);
+    }
+  } catch (err) {
+    console.warn('Network error saving logo to cloud database:', err);
+  }
+
   return logo.id;
 };
 
 export const deleteLogo = async (id: string): Promise<void> => {
-  const res = await fetch(`/api/logos?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-  if (!res.ok) {
-    throw new Error(`Failed to delete logo from database (HTTP ${res.status})`);
-  }
-
+  // Update local cache immediately for instant UI deletion
   const current = getCachedLogos().filter((l) => l.id !== id);
   setCachedLogos(current);
+
+  try {
+    const res = await fetch(`/api/logos?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!res.ok) {
+      console.warn(`Backend delete logo returned HTTP status ${res.status}`);
+    }
+  } catch (err) {
+    console.warn('Network error deleting logo from backend database:', err);
+  }
 };
 
 export const saveLogosOrder = async (logos: LogoItem[]): Promise<void> => {
   const ordered = logos.map((item, idx) => ({ ...item, order: idx }));
-  const res = await fetch('/api/logos', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items: ordered }),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to save logo order to database (HTTP ${res.status})`);
-  }
-
   setCachedLogos(ordered);
+
+  try {
+    const res = await fetch('/api/logos', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: ordered }),
+    });
+    if (!res.ok) {
+      console.warn(`Failed to save logo order to database (HTTP ${res.status})`);
+    }
+  } catch (err) {
+    console.warn('Network error saving logo order to database:', err);
+  }
 };
 
 // ==========================================
@@ -131,16 +141,7 @@ export const getAllMovies = async (): Promise<MovieItem[]> => {
 };
 
 export const saveMovie = async (movie: MovieItem): Promise<string> => {
-  const res = await fetch('/api/movies', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(movie),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to save movie to database (HTTP ${res.status})`);
-  }
-
+  // Update local cache immediately for instant UI responsiveness
   const current = getCachedMovies();
   const existingIdx = current.findIndex((item) => item.id === movie.id);
   let updated: MovieItem[];
@@ -152,30 +153,51 @@ export const saveMovie = async (movie: MovieItem): Promise<string> => {
   }
   setCachedMovies(updated);
 
+  try {
+    const res = await fetch('/api/movies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(movie),
+    });
+    if (!res.ok) {
+      console.warn(`Failed to persist movie to cloud database (HTTP ${res.status})`);
+    }
+  } catch (err) {
+    console.warn('Network error saving movie to cloud database:', err);
+  }
+
   return movie.id;
 };
 
 export const deleteMovie = async (id: string): Promise<void> => {
-  const res = await fetch(`/api/movies?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-  if (!res.ok) {
-    throw new Error(`Failed to delete movie from database (HTTP ${res.status})`);
-  }
-
+  // Update local cache immediately for instant UI deletion
   const current = getCachedMovies().filter((m) => m.id !== id);
   setCachedMovies(current);
+
+  try {
+    const res = await fetch(`/api/movies?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!res.ok) {
+      console.warn(`Backend delete movie returned HTTP status ${res.status}`);
+    }
+  } catch (err) {
+    console.warn('Network error deleting movie from backend database:', err);
+  }
 };
 
 export const saveMoviesOrder = async (movies: MovieItem[]): Promise<void> => {
   const ordered = movies.map((item, idx) => ({ ...item, order: idx }));
-  const res = await fetch('/api/movies', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items: ordered }),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to save movie order to database (HTTP ${res.status})`);
-  }
-
   setCachedMovies(ordered);
+
+  try {
+    const res = await fetch('/api/movies', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: ordered }),
+    });
+    if (!res.ok) {
+      console.warn(`Failed to save movie order to database (HTTP ${res.status})`);
+    }
+  } catch (err) {
+    console.warn('Network error saving movie order to database:', err);
+  }
 };
