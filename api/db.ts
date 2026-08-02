@@ -1,5 +1,12 @@
 import { MongoClient } from 'mongodb';
 
+// Failsafe declaration for Vercel Node runtime process env
+declare const process: {
+  env: {
+    [key: string]: string | undefined;
+  };
+};
+
 // MongoDB Atlas Connection URI
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://admin:freshers2026@cluster0.mongodb.net/freshers_arena?retryWrites=true&w=majority';
 
