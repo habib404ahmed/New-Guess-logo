@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDatabase } from './db';
+import { getDatabase, fetchCloudItems, saveCloudItems } from './db';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS Headers for global access across all devices
@@ -13,22 +13,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const db = await getDatabase();
-    if (!db) {
-      return res.status(503).json({
-        error: 'Database Unavailable. Please configure MONGODB_URI in Vercel Project Settings.',
-      });
-    }
-
-    const collection = db.collection('movies');
 
     // GET /api/movies - Fetch all movies for any device
     if (req.method === 'GET') {
-      const movies = await collection.find({}).sort({ order: 1, createdAt: 1 }).toArray();
-      const sanitized = movies.map((doc: any) => {
-        const { _id, ...rest } = doc;
-        return rest;
-      });
-      return res.status(200).json(sanitized);
+      let items: any[] = [];
+
+      if (db) {
+        try {
+          const collection = db.collection('movies');
+          const movies = await collection.find({}).sort({ order: 1, createdAt: 1 }).toArray();
+          items = movies.map((doc: any) => {
+            const { _id, ...rest } = doc;
+            return rest;
+          });
+        } catch (err) {
+          console.warn('MongoDB GET movies failed, checking cloud store:', err);
+        }
+      }
+
+      if (!items || items.length === 0) {
+        items = await fetchCloudItems('movies');
+      }
+
+      return res.status(200).json(items);
     }
 
     // POST /api/movies - Add or update a movie
@@ -38,11 +45,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'Invalid movie item payload' });
       }
 
-      await collection.updateOne(
-        { id: movie.id },
-        { $set: movie },
-        { upsert: true }
-      );
+      if (db) {
+        try {
+          const collection = db.collection('movies');
+          await collection.updateOne(
+            { id: movie.id },
+            { $set: movie },
+            { upsert: true }
+          );
+        } catch (err) {
+          console.warn('MongoDB POST movie failed, saving to cloud store:', err);
+        }
+      }
+
+      // Sync to global cloud store
+      const cloudItems = await fetchCloudItems('movies');
+      const idx = cloudItems.findIndex((m: any) => m.id === movie.id);
+      if (idx >= 0) {
+        cloudItems[idx] = movie;
+      } else {
+        cloudItems.push(movie);
+      }
+      await saveCloudItems('movies', cloudItems);
 
       return res.status(200).json({ success: true, movie });
     }
@@ -54,15 +78,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'Expected items array for reordering' });
       }
 
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        await collection.updateOne(
-          { id: item.id },
-          { $set: { ...item, order: i } },
-          { upsert: true }
-        );
+      if (db) {
+        try {
+          const collection = db.collection('movies');
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            await collection.updateOne(
+              { id: item.id },
+              { $set: { ...item, order: i } },
+              { upsert: true }
+            );
+          }
+        } catch (err) {
+          console.warn('MongoDB PUT movies failed:', err);
+        }
       }
 
+      await saveCloudItems('movies', items);
       return res.status(200).json({ success: true });
     }
 
@@ -73,7 +105,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'Movie ID required for deletion' });
       }
 
-      await collection.deleteOne({ id });
+      if (db) {
+        try {
+          const collection = db.collection('movies');
+          await collection.deleteOne({ id });
+        } catch (err) {
+          console.warn('MongoDB DELETE movie failed:', err);
+        }
+      }
+
+      const cloudItems = await fetchCloudItems('movies');
+      const filtered = cloudItems.filter((m: any) => m.id !== id);
+      await saveCloudItems('movies', filtered);
+
       return res.status(200).json({ success: true });
     }
 
