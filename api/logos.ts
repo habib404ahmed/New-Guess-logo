@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDatabase, getMemoryStore } from './db';
+import { getDatabase, fetchCloudItems, saveCloudItems } from './db';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS Headers for global access across all devices
@@ -13,21 +13,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const db = await getDatabase();
-    const memoryStore = getMemoryStore();
 
     // GET /api/logos - Fetch all logos for any device
     if (req.method === 'GET') {
+      let items: any[] = [];
+
       if (db) {
-        const collection = db.collection('logos');
-        const logos = await collection.find({}).sort({ order: 1, createdAt: 1 }).toArray();
-        const sanitized = logos.map((doc: any) => {
-          const { _id, ...rest } = doc;
-          return rest;
-        });
-        return res.status(200).json(sanitized);
-      } else {
-        return res.status(200).json(memoryStore.logos);
+        try {
+          const collection = db.collection('logos');
+          const logos = await collection.find({}).sort({ order: 1, createdAt: 1 }).toArray();
+          items = logos.map((doc: any) => {
+            const { _id, ...rest } = doc;
+            return rest;
+          });
+        } catch (err) {
+          console.warn('MongoDB GET logos failed, falling back to cloud KV:', err);
+        }
       }
+
+      if (!items || items.length === 0) {
+        items = await fetchCloudItems('logos');
+      }
+
+      return res.status(200).json(items);
     }
 
     // POST /api/logos - Add or update a logo
@@ -38,21 +46,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (db) {
-        const collection = db.collection('logos');
-        await collection.updateOne(
-          { id: logo.id },
-          { $set: logo },
-          { upsert: true }
-        );
+        try {
+          const collection = db.collection('logos');
+          await collection.updateOne(
+            { id: logo.id },
+            { $set: logo },
+            { upsert: true }
+          );
+        } catch (err) {
+          console.warn('MongoDB POST logo failed, writing to cloud KV:', err);
+        }
       }
 
-      // Update memory store
-      const idx = memoryStore.logos.findIndex((l: any) => l.id === logo.id);
+      // Sync to global cloud KV
+      const cloudItems = await fetchCloudItems('logos');
+      const idx = cloudItems.findIndex((l: any) => l.id === logo.id);
       if (idx >= 0) {
-        memoryStore.logos[idx] = logo;
+        cloudItems[idx] = logo;
       } else {
-        memoryStore.logos.push(logo);
+        cloudItems.push(logo);
       }
+      await saveCloudItems('logos', cloudItems);
 
       return res.status(200).json({ success: true, logo });
     }
@@ -65,18 +79,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (db) {
-        const collection = db.collection('logos');
-        for (let i = 0; i < items.length; i++) {
-          const item = items[i];
-          await collection.updateOne(
-            { id: item.id },
-            { $set: { ...item, order: i } },
-            { upsert: true }
-          );
+        try {
+          const collection = db.collection('logos');
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            await collection.updateOne(
+              { id: item.id },
+              { $set: { ...item, order: i } },
+              { upsert: true }
+            );
+          }
+        } catch (err) {
+          console.warn('MongoDB PUT logos failed:', err);
         }
       }
 
-      memoryStore.logos = items;
+      await saveCloudItems('logos', items);
       return res.status(200).json({ success: true });
     }
 
@@ -88,11 +106,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (db) {
-        const collection = db.collection('logos');
-        await collection.deleteOne({ id });
+        try {
+          const collection = db.collection('logos');
+          await collection.deleteOne({ id });
+        } catch (err) {
+          console.warn('MongoDB DELETE logo failed:', err);
+        }
       }
 
-      memoryStore.logos = memoryStore.logos.filter((l: any) => l.id !== id);
+      const cloudItems = await fetchCloudItems('logos');
+      const filtered = cloudItems.filter((l: any) => l.id !== id);
+      await saveCloudItems('logos', filtered);
+
       return res.status(200).json({ success: true });
     }
 
