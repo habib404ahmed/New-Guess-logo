@@ -39,25 +39,38 @@ const setCachedMovies = (movies: MovieItem[]) => {
 };
 
 // ==========================================
-// LOGO STORAGE OPERATIONS (MONGODB ATLAS)
+// LOGO STORAGE OPERATIONS (CLOUD & DATABASE)
 // ==========================================
 
 export const getAllLogos = async (): Promise<LogoItem[]> => {
   try {
     const res = await fetch('/api/logos');
     if (res.ok) {
-      const data: LogoItem[] = await res.json();
-      setCachedLogos(data);
-      return data;
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setCachedLogos(data);
+        return data;
+      }
     }
   } catch (err) {
-    console.warn('Backend API unavailable, using cached MongoDB metadata:', err);
+    console.warn('Failed to fetch logos from backend API:', err);
   }
   return getCachedLogos();
 };
 
 export const saveLogo = async (logo: LogoItem): Promise<string> => {
-  // Update local cache immediately for instant UI update
+  // Save to backend API
+  const res = await fetch('/api/logos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(logo),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to save logo to database (HTTP ${res.status})`);
+  }
+
+  // Update local cache
   const current = getCachedLogos();
   const existingIdx = current.findIndex((item) => item.id === logo.id);
   let updated: LogoItem[];
@@ -69,66 +82,65 @@ export const saveLogo = async (logo: LogoItem): Promise<string> => {
   }
   setCachedLogos(updated);
 
-  try {
-    const res = await fetch('/api/logos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(logo),
-    });
-    if (!res.ok) {
-      console.warn('Failed to persist logo to MongoDB Atlas API');
-    }
-  } catch (err) {
-    console.warn('Network error saving logo to MongoDB Atlas:', err);
-  }
   return logo.id;
 };
 
 export const deleteLogo = async (id: string): Promise<void> => {
+  const res = await fetch(`/api/logos?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!res.ok) {
+    throw new Error(`Failed to delete logo from database (HTTP ${res.status})`);
+  }
+
   const current = getCachedLogos().filter((l) => l.id !== id);
   setCachedLogos(current);
-
-  try {
-    await fetch(`/api/logos?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-  } catch (err) {
-    console.warn('Network error deleting logo from MongoDB Atlas:', err);
-  }
 };
 
 export const saveLogosOrder = async (logos: LogoItem[]): Promise<void> => {
   const ordered = logos.map((item, idx) => ({ ...item, order: idx }));
-  setCachedLogos(ordered);
+  const res = await fetch('/api/logos', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: ordered }),
+  });
 
-  try {
-    await fetch('/api/logos', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: ordered }),
-    });
-  } catch (err) {
-    console.warn('Network error saving logos order to MongoDB Atlas:', err);
+  if (!res.ok) {
+    throw new Error(`Failed to save logo order to database (HTTP ${res.status})`);
   }
+
+  setCachedLogos(ordered);
 };
 
 // ==========================================
-// MOVIE STORAGE OPERATIONS (MONGODB ATLAS)
+// MOVIE STORAGE OPERATIONS (CLOUD & DATABASE)
 // ==========================================
 
 export const getAllMovies = async (): Promise<MovieItem[]> => {
   try {
     const res = await fetch('/api/movies');
     if (res.ok) {
-      const data: MovieItem[] = await res.json();
-      setCachedMovies(data);
-      return data;
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setCachedMovies(data);
+        return data;
+      }
     }
   } catch (err) {
-    console.warn('Backend API unavailable, using cached MongoDB metadata:', err);
+    console.warn('Failed to fetch movies from backend API:', err);
   }
   return getCachedMovies();
 };
 
 export const saveMovie = async (movie: MovieItem): Promise<string> => {
+  const res = await fetch('/api/movies', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(movie),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to save movie to database (HTTP ${res.status})`);
+  }
+
   const current = getCachedMovies();
   const existingIdx = current.findIndex((item) => item.id === movie.id);
   let updated: MovieItem[];
@@ -140,43 +152,30 @@ export const saveMovie = async (movie: MovieItem): Promise<string> => {
   }
   setCachedMovies(updated);
 
-  try {
-    const res = await fetch('/api/movies', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(movie),
-    });
-    if (!res.ok) {
-      console.warn('Failed to persist movie to MongoDB Atlas API');
-    }
-  } catch (err) {
-    console.warn('Network error saving movie to MongoDB Atlas:', err);
-  }
   return movie.id;
 };
 
 export const deleteMovie = async (id: string): Promise<void> => {
+  const res = await fetch(`/api/movies?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!res.ok) {
+    throw new Error(`Failed to delete movie from database (HTTP ${res.status})`);
+  }
+
   const current = getCachedMovies().filter((m) => m.id !== id);
   setCachedMovies(current);
-
-  try {
-    await fetch(`/api/movies?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-  } catch (err) {
-    console.warn('Network error deleting movie from MongoDB Atlas:', err);
-  }
 };
 
 export const saveMoviesOrder = async (movies: MovieItem[]): Promise<void> => {
   const ordered = movies.map((item, idx) => ({ ...item, order: idx }));
-  setCachedMovies(ordered);
+  const res = await fetch('/api/movies', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: ordered }),
+  });
 
-  try {
-    await fetch('/api/movies', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: ordered }),
-    });
-  } catch (err) {
-    console.warn('Network error saving movies order to MongoDB Atlas:', err);
+  if (!res.ok) {
+    throw new Error(`Failed to save movie order to database (HTTP ${res.status})`);
   }
+
+  setCachedMovies(ordered);
 };
