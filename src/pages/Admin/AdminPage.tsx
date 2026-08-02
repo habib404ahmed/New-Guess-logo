@@ -41,12 +41,12 @@ export const AdminPage: React.FC = () => {
               {activeTab === 'movies' && 'Movie Challenge Manager'}
               {activeTab === 'settings' && 'Event Settings'}
             </h1>
-            <Badge variant="green" className="text-[10px]">IndexedDB Active</Badge>
+            <Badge variant="blue" className="text-[10px]">Cloud Active</Badge>
           </div>
 
           <div className="flex items-center gap-3">
             <span className="text-xs text-slate-400 font-mono flex items-center gap-1.5">
-              <FiDatabase className="text-cyan-400" /> Storage: Local IndexedDB
+              <FiDatabase className="text-cyan-400" /> Storage: Cloudinary & Cloud Sync
             </span>
             <Button size="sm" variant="glass" onClick={refresh}>
               Sync Data
