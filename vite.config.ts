@@ -1,8 +1,8 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import logosHandler from './api/logos.ts';
-import moviesHandler from './api/movies.ts';
+import logosHandler from './api/logos';
+import moviesHandler from './api/movies';
 
 function apiServerPlugin(): Plugin {
   return {

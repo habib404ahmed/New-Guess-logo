@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDatabase, getMemoryStore } from './db.ts';
+import { getDatabase, getMemoryStore } from './db';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS Headers for global access across all devices
