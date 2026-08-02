@@ -23,7 +23,9 @@ export const uploadToCloudinary = async (
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', 'https://api.cloudinary.com/v1_1/vjqnrvyr/auto/upload');
+    const targetUrl = 'https://api.cloudinary.com/v1_1/vjqnrvyr/auto/upload';
+    
+    xhr.open('POST', targetUrl);
 
     if (options?.onProgress && xhr.upload) {
       xhr.upload.onprogress = (event) => {
@@ -39,20 +41,25 @@ export const uploadToCloudinary = async (
         try {
           const response = JSON.parse(xhr.responseText);
           if (response.secure_url) {
+            console.log('✅ Cloudinary Upload Success! secure_url:', response.secure_url);
             resolve(response.secure_url);
           } else {
+            console.error('❌ Cloudinary Response Error: Missing secure_url in response payload:', response);
             reject(new Error('Cloudinary response missing secure_url field'));
           }
         } catch (err) {
+          console.error('❌ Cloudinary JSON Parsing Error:', err, xhr.responseText);
           reject(new Error('Failed to parse Cloudinary response JSON'));
         }
       } else {
+        console.error(`❌ Cloudinary Upload Failed with HTTP status ${xhr.status}:`, xhr.responseText);
         reject(new Error(`Cloudinary upload failed with HTTP status ${xhr.status}`));
       }
     };
 
     xhr.onerror = () => {
-      reject(new Error('Network error occurred during Cloudinary upload'));
+      console.error('❌ Cloudinary Network/CORS Error during upload to:', targetUrl);
+      reject(new Error('Network or CORS error occurred during Cloudinary upload'));
     };
 
     xhr.send(formData);
