@@ -30,7 +30,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const movies = await collection.find({}).sort({ order: 1, createdAt: 1 }).toArray();
           items = movies.map((doc: any) => {
             const { _id, ...rest } = doc;
-            return rest;
+            const videoUrl = rest.videoData || rest.videoUrl;
+            const title = rest.title || rest.movieTitle;
+            const dialogue = rest.dialogue || rest.dialogueText;
+            return {
+              ...rest,
+              title,
+              videoData: videoUrl,
+              videoUrl: videoUrl,
+              dialogue,
+            };
           });
         } catch (err) {
           console.error('FULL ERROR (GET /api/movies mongo):', err);
@@ -39,24 +48,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (!items || items.length === 0) {
-        items = await fetchCloudItems('movies');
+        const rawItems = await fetchCloudItems('movies');
+        items = (rawItems || []).map((m: any) => {
+          const videoUrl = m.videoData || m.videoUrl;
+          const title = m.title || m.movieTitle;
+          const dialogue = m.dialogue || m.dialogueText;
+          return {
+            ...m,
+            title,
+            videoData: videoUrl,
+            videoUrl: videoUrl,
+            dialogue,
+          };
+        });
       }
 
       console.log('GET /api/movies returning items count:', items.length);
+      console.log('GET /api/movies payload:', items);
       return res.status(200).json(items);
     }
 
     // POST /api/movies - Add or update a movie document
     if (req.method === 'POST') {
       const movie = req.body;
-      if (!movie || !movie.id || !movie.videoData) {
+      const videoUrl = movie?.videoData || movie?.videoUrl;
+      const title = movie?.title || movie?.movieTitle;
+      const dialogue = movie?.dialogue || movie?.dialogueText || 'Guess the movie from the clip!';
+
+      if (!movie || !movie.id || !videoUrl) {
         console.error('❌ POST /api/movies Error: Invalid movie payload:', movie);
-        return res.status(400).json({ error: 'Invalid movie document payload' });
+        return res.status(400).json({ error: 'Invalid movie document payload. id and videoUrl/videoData are required.' });
       }
 
       const now = Date.now();
       const document = {
         ...movie,
+        title: title,
+        movieTitle: title,
+        videoData: videoUrl,
+        videoUrl: videoUrl,
+        dialogue: dialogue,
+        dialogueText: dialogue,
         createdAt: movie.createdAt || now,
         updatedAt: now,
       };

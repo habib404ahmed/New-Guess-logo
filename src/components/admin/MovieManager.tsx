@@ -255,11 +255,15 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
   };
 
   // Filtered Movies
-  const filteredMovies = movies.filter(
-    (m) =>
-      m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.dialogue.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  console.log('Movies from API:', movies);
+  const filteredMovies = movies.filter((m) => {
+    const titleStr = m.title || (m as any).movieTitle || '';
+    const dialogueStr = m.dialogue || (m as any).dialogueText || '';
+    return (
+      titleStr.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      dialogueStr.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  });
 
   return (
     <div className="space-y-6">
