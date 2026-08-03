@@ -6,16 +6,23 @@ declare const process: {
   };
 };
 
-// MongoDB Atlas Connection URI
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://admin:freshers2026@cluster0.mongodb.net/freshers_arena?retryWrites=true&w=majority';
+// Check Vercel Environment Variables
+console.log('----------------------------------------------------');
+console.log('📌 Vercel Backend Init Check:');
+console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'Defined OK' : 'Missing (Using Cloud Fallback)');
+console.log('CLOUDINARY_CLOUD_NAME:', process.env.CLOUDINARY_CLOUD_NAME ? 'Defined OK' : 'Missing (Using default vjqnrvyr)');
+console.log('CLOUDINARY_API_KEY:', process.env.CLOUDINARY_API_KEY ? 'Defined OK' : 'Missing');
+console.log('CLOUDINARY_API_SECRET:', process.env.CLOUDINARY_API_SECRET ? 'Defined OK' : 'Missing');
+console.log('----------------------------------------------------');
+
+const MONGODB_URI = process.env.MONGODB_URI || '';
 
 let client: MongoClient | null = null;
 let clientPromise: Promise<MongoClient> | null = null;
 
 export const getMongoClient = async (): Promise<MongoClient | null> => {
   const uri = process.env.MONGODB_URI || MONGODB_URI;
-  if (!uri || uri.includes('cluster0.mongodb.net')) {
-    // If process.env.MONGODB_URI is not set, use high-availability cloud database REST endpoint
+  if (!uri) {
     return null;
   }
 
@@ -23,13 +30,15 @@ export const getMongoClient = async (): Promise<MongoClient | null> => {
     if (client) return client;
     if (!clientPromise) {
       client = new MongoClient(uri, {
-        serverSelectionTimeoutMS: 3000,
+        serverSelectionTimeoutMS: 2000,
       } as any);
       clientPromise = client.connect();
     }
-    return await clientPromise;
-  } catch (err) {
-    console.error('MongoDB Atlas connection failed:', err);
+    const connectedClient = await clientPromise;
+    console.log('✅ MongoDB Connection Status: Connected');
+    return connectedClient;
+  } catch (err: any) {
+    console.error('❌ MongoDB Connection Failed:', err?.message || err);
     client = null;
     clientPromise = null;
     return null;
@@ -37,9 +46,13 @@ export const getMongoClient = async (): Promise<MongoClient | null> => {
 };
 
 export const getDatabase = async () => {
-  const mongoClient = await getMongoClient();
-  if (mongoClient) {
-    return mongoClient.db('freshers_arena');
+  try {
+    const mongoClient = await getMongoClient();
+    if (mongoClient) {
+      return mongoClient.db('freshers_arena');
+    }
+  } catch (err) {
+    console.error('❌ getDatabase Error:', err);
   }
   return null;
 };
@@ -68,7 +81,6 @@ export const fetchCloudItems = async (key: 'logos' | 'movies' | 'settings'): Pro
 
 export const saveCloudItems = async (key: 'logos' | 'movies' | 'settings', items: any): Promise<boolean> => {
   try {
-    // 1. Fetch current global store payload
     let currentPayload: { logos: any[]; movies: any[]; settings: any } = {
       logos: [],
       movies: [],
@@ -88,10 +100,8 @@ export const saveCloudItems = async (key: 'logos' | 'movies' | 'settings', items
       }
     } catch {}
 
-    // 2. Update specific key
     currentPayload[key] = items;
 
-    // 3. PUT updated payload to cloud store
     const putRes = await fetch(CLOUD_DB_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

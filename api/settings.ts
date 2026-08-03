@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDatabase, fetchCloudItems, saveCloudItems } from './db';
+import { getDatabase, fetchCloudItems, saveCloudItems } from './db.js';
 
 const DEFAULT_SETTINGS = {
   logoTimerDuration: 30,
@@ -26,6 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (db) {
         try {
+          console.log('Using collection: settings');
           const collection = db.collection('settings');
           const doc = await collection.findOne({ id: 'game_settings' });
           if (doc) {
@@ -60,6 +61,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (db) {
         try {
+          console.log('Using collection: settings');
           const collection = db.collection('settings');
           await collection.updateOne(
             { id: 'game_settings' },
@@ -72,12 +74,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       await saveCloudItems('settings', updatedSettings);
-      return res.status(200).json({ success: true, settings: updatedSettings });
+      return res.status(201).json({ success: true, settings: updatedSettings });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (err: any) {
-    console.error('API Error (settings):', err);
-    return res.status(500).json({ error: err.message || 'Internal Server Error' });
+    console.error('FULL ERROR (api/settings):', err);
+    return res.status(500).json({
+      success: false,
+      error: String(err?.message || err),
+      stack: err?.stack,
+    });
   }
 }

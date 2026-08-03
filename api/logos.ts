@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDatabase, fetchCloudItems, saveCloudItems } from './db';
+import { getDatabase, fetchCloudItems, saveCloudItems } from './db.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS Headers for multi-device cross-origin access
@@ -20,6 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (db) {
         try {
+          console.log('Using collection: logos');
           const collection = db.collection('logos');
           const logos = await collection.find({}).sort({ order: 1, createdAt: 1 }).toArray();
           items = logos.map((doc: any) => {
@@ -54,6 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (db) {
         try {
+          console.log('Using collection: logos');
           const collection = db.collection('logos');
           await collection.updateOne(
             { id: logo.id },
@@ -75,7 +77,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       await saveCloudItems('logos', cloudItems);
 
-      return res.status(200).json({ success: true, logo: document });
+      return res.status(201).json({ success: true, logo: document });
     }
 
     // PUT /api/logos - Reorder or update logo document
@@ -87,6 +89,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (db) {
         try {
+          console.log('Using collection: logos');
           const collection = db.collection('logos');
           for (let i = 0; i < items.length; i++) {
             const item = items[i];
@@ -119,6 +122,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (db) {
         try {
+          console.log('Using collection: logos');
           const collection = db.collection('logos');
           await collection.deleteOne({ id });
         } catch (err) {
@@ -135,7 +139,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (err: any) {
-    console.error('API Error (logos):', err);
-    return res.status(500).json({ error: err.message || 'Internal Server Error' });
+    console.error('FULL ERROR (api/logos):', err);
+    return res.status(500).json({
+      success: false,
+      error: String(err?.message || err),
+      stack: err?.stack,
+    });
   }
 }

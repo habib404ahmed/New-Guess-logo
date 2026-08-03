@@ -3,9 +3,9 @@ process.env.VITE_CONFIG_NATIVE_IGNORE_WARNING = 'true';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import logosHandler from './api/logos';
-import moviesHandler from './api/movies';
-import settingsHandler from './api/settings';
+import logosHandler from './api/logos.js';
+import moviesHandler from './api/movies.js';
+import settingsHandler from './api/settings.js';
 
 function apiServerPlugin(): Plugin {
   return {
