@@ -11,6 +11,7 @@ export const getAllLogos = async (): Promise<LogoItem[]> => {
     const res = await fetch('/api/logos');
     if (res.ok) {
       const data = await res.json();
+      console.log('Logos from API:', data);
       if (Array.isArray(data)) {
         return data;
       }
@@ -28,12 +29,11 @@ export const saveLogo = async (logo: LogoItem): Promise<string> => {
     body: JSON.stringify(logo),
   });
 
+  const responseBody = await res.json();
+  console.log('POST logo response:', responseBody);
+
   if (!res.ok) {
-    let errMessage = `Failed to save logo to database (HTTP ${res.status})`;
-    try {
-      const body = await res.json();
-      if (body.error) errMessage = body.error;
-    } catch {}
+    const errMessage = responseBody.error || `Failed to save logo to database (HTTP ${res.status})`;
     throw new Error(errMessage);
   }
 
@@ -76,6 +76,7 @@ export const getAllMovies = async (): Promise<MovieItem[]> => {
     const res = await fetch('/api/movies');
     if (res.ok) {
       const data = await res.json();
+      console.log('Movies after insert:', data);
       if (Array.isArray(data)) {
         return data;
       }
@@ -93,12 +94,11 @@ export const saveMovie = async (movie: MovieItem): Promise<string> => {
     body: JSON.stringify(movie),
   });
 
+  const responseBody = await res.json();
+  console.log('POST response:', responseBody);
+
   if (!res.ok) {
-    let errMessage = `Failed to save movie to database (HTTP ${res.status})`;
-    try {
-      const body = await res.json();
-      if (body.error) errMessage = body.error;
-    } catch {}
+    const errMessage = responseBody.error || `Failed to save movie to database (HTTP ${res.status})`;
     throw new Error(errMessage);
   }
 

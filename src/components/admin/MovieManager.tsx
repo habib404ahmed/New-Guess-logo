@@ -255,7 +255,7 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
   };
 
   // Filtered Movies
-  console.log('Movies from API:', movies);
+  console.log('Movie state:', movies);
   const filteredMovies = movies.filter((m) => {
     const titleStr = m.title || (m as any).movieTitle || '';
     const dialogueStr = m.dialogue || (m as any).dialogueText || '';
