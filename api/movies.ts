@@ -11,6 +11,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
+  console.log(`📌 API Invocation: ${req.method} ${req.url}`);
+  console.log('Request Body:', req.body);
+
   try {
     const db = await getDatabase();
 
@@ -22,6 +25,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         try {
           console.log('Using collection: movies');
           const collection = db.collection('movies');
+          const count = await collection.countDocuments({});
+          console.log(`Document count in movies collection: ${count}`);
           const movies = await collection.find({}).sort({ order: 1, createdAt: 1 }).toArray();
           items = movies.map((doc: any) => {
             const { _id, ...rest } = doc;
@@ -37,6 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         items = await fetchCloudItems('movies');
       }
 
+      console.log('GET /api/movies returning items count:', items.length);
       return res.status(200).json(items);
     }
 
@@ -44,6 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'POST') {
       const movie = req.body;
       if (!movie || !movie.id || !movie.videoData) {
+        console.error('❌ POST /api/movies Error: Invalid movie payload:', movie);
         return res.status(400).json({ error: 'Invalid movie document payload' });
       }
 
@@ -54,15 +61,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updatedAt: now,
       };
 
+      console.log('Saving movie payload to database:', document);
+
       if (db) {
         try {
           console.log('Using collection: movies');
           const collection = db.collection('movies');
-          await collection.updateOne(
+          const result = await collection.updateOne(
             { id: movie.id },
             { $set: document },
             { upsert: true }
           );
+          console.log('MongoDB Insert/Update Result:', result);
+          const count = await collection.countDocuments({});
+          console.log(`Document count after insert: ${count}`);
         } catch (err) {
           console.error('FULL ERROR (POST /api/movies mongo):', err);
           console.warn('MongoDB POST movie failed, saving to cloud database:', err);
@@ -78,6 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         cloudItems.push(document);
       }
       await saveCloudItems('movies', cloudItems);
+      console.log('Saved to cloud database. Total items:', cloudItems.length);
 
       return res.status(201).json({ success: true, movie: document });
     }

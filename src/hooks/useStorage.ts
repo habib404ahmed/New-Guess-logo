@@ -12,6 +12,8 @@ export const useStorage = () => {
     try {
       const loadedLogos = await getAllLogos();
       const loadedMovies = await getAllMovies();
+      console.log('Logos loaded:', loadedLogos);
+      console.log('Movies loaded:', loadedMovies);
       setLogos(loadedLogos);
       setMovies(loadedMovies);
     } catch (err) {

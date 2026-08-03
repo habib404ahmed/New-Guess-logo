@@ -6,7 +6,6 @@ declare const process: {
   };
 };
 
-// Check Vercel Environment Variables
 console.log(process.env.MONGODB_URI ? 'Mongo URI OK' : 'Mongo URI Missing');
 console.log(process.env.CLOUDINARY_CLOUD_NAME ? 'Cloudinary Cloud Name OK' : 'Cloudinary Cloud Name Missing');
 console.log(process.env.CLOUDINARY_API_KEY ? 'Cloudinary API Key OK' : 'Cloudinary API Key Missing');
@@ -61,9 +60,9 @@ export const getDatabase = async () => {
 
 // ========================================================
 // GLOBAL CLOUD METADATA STORE (Cloudinary + Backend REST DB)
-// Shared database object for Freshers Arena cross-device sync
+// Master database object for Freshers Arena cross-device sync
 // ========================================================
-const CLOUD_DB_OBJECT_ID = 'ff8081819f7e10ae019fc3ca196d641d';
+const CLOUD_DB_OBJECT_ID = 'ff8081819f7e10ae019fc86b498a6a8f';
 const CLOUD_DB_URL = `https://api.restful-api.dev/objects/${CLOUD_DB_OBJECT_ID}`;
 
 export const fetchCloudItems = async (key: 'logos' | 'movies' | 'settings'): Promise<any> => {
@@ -108,7 +107,7 @@ export const saveCloudItems = async (key: 'logos' | 'movies' | 'settings', items
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: 'freshers_arena_database',
+        name: 'freshers_arena_master_db',
         data: currentPayload,
       }),
     });

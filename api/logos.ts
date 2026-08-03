@@ -11,6 +11,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
+  console.log(`📌 API Invocation: ${req.method} ${req.url}`);
+  console.log('Request Body:', req.body);
+
   try {
     const db = await getDatabase();
 
@@ -22,6 +25,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         try {
           console.log('Using collection: logos');
           const collection = db.collection('logos');
+          const count = await collection.countDocuments({});
+          console.log(`Document count in logos collection: ${count}`);
           const logos = await collection.find({}).sort({ order: 1, createdAt: 1 }).toArray();
           items = logos.map((doc: any) => {
             const { _id, ...rest } = doc;
@@ -37,6 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         items = await fetchCloudItems('logos');
       }
 
+      console.log('GET /api/logos returning items count:', items.length);
       return res.status(200).json(items);
     }
 
@@ -44,6 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'POST') {
       const logo = req.body;
       if (!logo || !logo.id || !logo.imageData) {
+        console.error('❌ POST /api/logos Error: Invalid logo payload:', logo);
         return res.status(400).json({ error: 'Invalid logo document payload' });
       }
 
@@ -54,15 +61,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updatedAt: now,
       };
 
+      console.log('Saving logo payload to database:', document);
+
       if (db) {
         try {
           console.log('Using collection: logos');
           const collection = db.collection('logos');
-          await collection.updateOne(
+          const result = await collection.updateOne(
             { id: logo.id },
             { $set: document },
             { upsert: true }
           );
+          console.log('MongoDB Insert/Update Result:', result);
+          const count = await collection.countDocuments({});
+          console.log(`Document count after insert: ${count}`);
         } catch (err) {
           console.error('FULL ERROR (POST /api/logos mongo):', err);
           console.warn('MongoDB POST logo failed, saving to cloud database:', err);
@@ -78,6 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         cloudItems.push(document);
       }
       await saveCloudItems('logos', cloudItems);
+      console.log('Saved to cloud database. Total items:', cloudItems.length);
 
       return res.status(201).json({ success: true, logo: document });
     }
