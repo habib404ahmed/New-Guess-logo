@@ -258,6 +258,7 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
 
   // Filtered Movies
   console.log('Movie state:', movies);
+  console.log('movies.length =', movies.length);
   const filteredMovies = movies.filter((m) => {
     const titleStr = m.title || (m as any).movieTitle || '';
     const dialogueStr = m.dialogue || (m as any).dialogueText || '';

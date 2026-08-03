@@ -10,10 +10,19 @@ export const getAllLogos = async (): Promise<LogoItem[]> => {
   try {
     const res = await fetch('/api/logos');
     if (res.ok) {
-      const data = await res.json();
-      console.log('Logos from API:', data);
-      if (Array.isArray(data)) {
-        return data;
+      const json = await res.json();
+      console.log('RAW API RESPONSE (logos):', json);
+      if (Array.isArray(json)) {
+        return json;
+      }
+      if (json && Array.isArray(json.data)) {
+        return json.data;
+      }
+      if (json && Array.isArray(json.logos)) {
+        return json.logos;
+      }
+      if (json && Array.isArray(json.items)) {
+        return json.items;
       }
     }
   } catch (err) {
@@ -75,10 +84,19 @@ export const getAllMovies = async (): Promise<MovieItem[]> => {
   try {
     const res = await fetch('/api/movies');
     if (res.ok) {
-      const data = await res.json();
-      console.log('Movies after insert:', data);
-      if (Array.isArray(data)) {
-        return data;
+      const json = await res.json();
+      console.log('RAW API RESPONSE (movies):', json);
+      if (Array.isArray(json)) {
+        return json;
+      }
+      if (json && Array.isArray(json.data)) {
+        return json.data;
+      }
+      if (json && Array.isArray(json.movies)) {
+        return json.movies;
+      }
+      if (json && Array.isArray(json.items)) {
+        return json.items;
       }
     }
   } catch (err) {

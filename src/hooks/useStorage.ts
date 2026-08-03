@@ -10,12 +10,15 @@ export const useStorage = () => {
   const refresh = async () => {
     setLoading(true);
     try {
+      console.log('loadMovies called');
       const loadedLogos = await getAllLogos();
       const loadedMovies = await getAllMovies();
       console.log('Logos loaded:', loadedLogos);
-      console.log('Movies loaded:', loadedMovies);
+      console.log('Movies before set', movies);
+      console.log('Movies from API', loadedMovies);
       setLogos(loadedLogos);
       setMovies(loadedMovies);
+      console.log('React state updated');
     } catch (err) {
       console.error('Failed to load items from backend database:', err);
     } finally {
