@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getAllLogos, getAllMovies } from '../storage/db';
 import type { LogoItem, MovieItem } from '../types';
 
@@ -7,28 +7,26 @@ export const useStorage = () => {
   const [movies, setMovies] = useState<MovieItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      console.log('loadMovies called');
+      console.log('Refreshing database storage...');
       const loadedLogos = await getAllLogos();
       const loadedMovies = await getAllMovies();
       console.log('Logos loaded:', loadedLogos);
-      console.log('Movies before set', movies);
-      console.log('Movies from API', loadedMovies);
+      console.log('Movies loaded:', loadedMovies);
       setLogos(loadedLogos);
       setMovies(loadedMovies);
-      console.log('React state updated');
     } catch (err) {
       console.error('Failed to load items from backend database:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     refresh();
-  }, []);
+  }, [refresh]);
 
-  return { logos, movies, loading, refresh };
+  return { logos, movies, loading, refresh, setLogos, setMovies };
 };
