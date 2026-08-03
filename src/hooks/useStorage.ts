@@ -15,7 +15,7 @@ export const useStorage = () => {
       setLogos(loadedLogos);
       setMovies(loadedMovies);
     } catch (err) {
-      console.error('Failed to load items from IndexedDB', err);
+      console.error('Failed to load items from backend database:', err);
     } finally {
       setLoading(false);
     }

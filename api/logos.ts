@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDatabase, fetchCloudItems, saveCloudItems } from './db';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS Headers for global access across all devices
+  // CORS Headers for multi-device cross-origin access
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -27,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return rest;
           });
         } catch (err) {
-          console.warn('MongoDB GET logos failed, checking cloud store:', err);
+          console.warn('MongoDB GET logos failed, loading from cloud database:', err);
         }
       }
 
@@ -38,40 +38,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(items);
     }
 
-    // POST /api/logos - Add or update a logo
+    // POST /api/logos - Add or update a logo document
     if (req.method === 'POST') {
       const logo = req.body;
       if (!logo || !logo.id || !logo.imageData) {
-        return res.status(400).json({ error: 'Invalid logo item payload' });
+        return res.status(400).json({ error: 'Invalid logo document payload' });
       }
+
+      const now = Date.now();
+      const document = {
+        ...logo,
+        createdAt: logo.createdAt || now,
+        updatedAt: now,
+      };
 
       if (db) {
         try {
           const collection = db.collection('logos');
           await collection.updateOne(
             { id: logo.id },
-            { $set: logo },
+            { $set: document },
             { upsert: true }
           );
         } catch (err) {
-          console.warn('MongoDB POST logo failed, saving to cloud store:', err);
+          console.warn('MongoDB POST logo failed, saving to cloud database:', err);
         }
       }
 
-      // Sync to global cloud store
+      // Save to cloud database
       const cloudItems = await fetchCloudItems('logos');
       const idx = cloudItems.findIndex((l: any) => l.id === logo.id);
       if (idx >= 0) {
-        cloudItems[idx] = logo;
+        cloudItems[idx] = document;
       } else {
-        cloudItems.push(logo);
+        cloudItems.push(document);
       }
       await saveCloudItems('logos', cloudItems);
 
-      return res.status(200).json({ success: true, logo });
+      return res.status(200).json({ success: true, logo: document });
     }
 
-    // PUT /api/logos - Reorder logos
+    // PUT /api/logos - Reorder or update logo document
     if (req.method === 'PUT') {
       const { items } = req.body;
       if (!Array.isArray(items)) {
@@ -85,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const item = items[i];
             await collection.updateOne(
               { id: item.id },
-              { $set: { ...item, order: i } },
+              { $set: { ...item, order: i, updatedAt: Date.now() } },
               { upsert: true }
             );
           }
@@ -94,11 +101,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      await saveCloudItems('logos', items);
+      const reordered = items.map((item: any, idx: number) => ({
+        ...item,
+        order: idx,
+        updatedAt: Date.now(),
+      }));
+      await saveCloudItems('logos', reordered);
       return res.status(200).json({ success: true });
     }
 
-    // DELETE /api/logos?id=XXX - Delete logo
+    // DELETE /api/logos?id=XXX - Delete logo document
     if (req.method === 'DELETE') {
       const { id } = req.query;
       if (!id || typeof id !== 'string') {

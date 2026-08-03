@@ -1,7 +1,5 @@
 import type { GameSettings } from '../types';
 
-const SETTINGS_KEY = 'freshers_arena_settings';
-
 export const DEFAULT_SETTINGS: GameSettings = {
   logoTimerDuration: 30,
   movieTimerDuration: 30,
@@ -9,22 +7,37 @@ export const DEFAULT_SETTINGS: GameSettings = {
   soundEnabled: true,
 };
 
-export const getGameSettings = (): GameSettings => {
+let inMemorySettings: GameSettings = { ...DEFAULT_SETTINGS };
+
+export const getGameSettingsAsync = async (): Promise<GameSettings> => {
   try {
-    const saved = localStorage.getItem(SETTINGS_KEY);
-    if (saved) {
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+    const res = await fetch('/api/settings');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && typeof data === 'object') {
+        inMemorySettings = { ...DEFAULT_SETTINGS, ...data };
+        return inMemorySettings;
+      }
     }
   } catch (err) {
-    console.error('Failed to load settings:', err);
+    console.error('Failed to fetch settings from API:', err);
   }
-  return DEFAULT_SETTINGS;
+  return inMemorySettings;
 };
 
-export const saveGameSettings = (settings: GameSettings): void => {
+export const getGameSettings = (): GameSettings => {
+  return inMemorySettings;
+};
+
+export const saveGameSettings = async (settings: GameSettings): Promise<void> => {
+  inMemorySettings = { ...DEFAULT_SETTINGS, ...settings };
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    });
   } catch (err) {
-    console.error('Failed to save settings:', err);
+    console.error('Failed to save settings to API:', err);
   }
 };

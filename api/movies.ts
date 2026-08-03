@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDatabase, fetchCloudItems, saveCloudItems } from './db';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS Headers for global access across all devices
+  // CORS Headers for multi-device cross-origin access
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -27,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return rest;
           });
         } catch (err) {
-          console.warn('MongoDB GET movies failed, checking cloud store:', err);
+          console.warn('MongoDB GET movies failed, loading from cloud database:', err);
         }
       }
 
@@ -38,40 +38,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(items);
     }
 
-    // POST /api/movies - Add or update a movie
+    // POST /api/movies - Add or update a movie document
     if (req.method === 'POST') {
       const movie = req.body;
       if (!movie || !movie.id || !movie.videoData) {
-        return res.status(400).json({ error: 'Invalid movie item payload' });
+        return res.status(400).json({ error: 'Invalid movie document payload' });
       }
+
+      const now = Date.now();
+      const document = {
+        ...movie,
+        createdAt: movie.createdAt || now,
+        updatedAt: now,
+      };
 
       if (db) {
         try {
           const collection = db.collection('movies');
           await collection.updateOne(
             { id: movie.id },
-            { $set: movie },
+            { $set: document },
             { upsert: true }
           );
         } catch (err) {
-          console.warn('MongoDB POST movie failed, saving to cloud store:', err);
+          console.warn('MongoDB POST movie failed, saving to cloud database:', err);
         }
       }
 
-      // Sync to global cloud store
+      // Save to cloud database
       const cloudItems = await fetchCloudItems('movies');
       const idx = cloudItems.findIndex((m: any) => m.id === movie.id);
       if (idx >= 0) {
-        cloudItems[idx] = movie;
+        cloudItems[idx] = document;
       } else {
-        cloudItems.push(movie);
+        cloudItems.push(document);
       }
       await saveCloudItems('movies', cloudItems);
 
-      return res.status(200).json({ success: true, movie });
+      return res.status(200).json({ success: true, movie: document });
     }
 
-    // PUT /api/movies - Reorder movies
+    // PUT /api/movies - Reorder or update movie document
     if (req.method === 'PUT') {
       const { items } = req.body;
       if (!Array.isArray(items)) {
@@ -85,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const item = items[i];
             await collection.updateOne(
               { id: item.id },
-              { $set: { ...item, order: i } },
+              { $set: { ...item, order: i, updatedAt: Date.now() } },
               { upsert: true }
             );
           }
@@ -94,11 +101,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      await saveCloudItems('movies', items);
+      const reordered = items.map((item: any, idx: number) => ({
+        ...item,
+        order: idx,
+        updatedAt: Date.now(),
+      }));
+      await saveCloudItems('movies', reordered);
       return res.status(200).json({ success: true });
     }
 
-    // DELETE /api/movies?id=XXX - Delete movie
+    // DELETE /api/movies?id=XXX - Delete movie document
     if (req.method === 'DELETE') {
       const { id } = req.query;
       if (!id || typeof id !== 'string') {

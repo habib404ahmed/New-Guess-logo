@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import logosHandler from './api/logos';
 import moviesHandler from './api/movies';
+import settingsHandler from './api/settings';
 
 function apiServerPlugin(): Plugin {
   return {
@@ -84,6 +85,46 @@ function apiServerPlugin(): Plugin {
 
           try {
             await moviesHandler(vercelReq, vercelRes);
+          } catch (err: any) {
+            res.statusCode = 500;
+            res.end(JSON.stringify({ error: err.message }));
+          }
+          return;
+        }
+
+        if (req.url?.startsWith('/api/settings')) {
+          const urlObj = new URL(req.url, `http://${req.headers.host}`);
+          const query = Object.fromEntries(urlObj.searchParams.entries());
+          let body: any = null;
+          if (req.method === 'POST' || req.method === 'PUT') {
+            const buffers: Uint8Array[] = [];
+            for await (const chunk of req) {
+              buffers.push(chunk);
+            }
+            const dataStr = Buffer.concat(buffers).toString('utf-8');
+            try {
+              body = JSON.parse(dataStr);
+            } catch {
+              body = null;
+            }
+          }
+
+          const vercelReq: any = { method: req.method, query, body, url: req.url };
+          const vercelRes: any = {
+            setHeader: (k: string, v: string) => res.setHeader(k, v),
+            status: (code: number) => {
+              res.statusCode = code;
+              return vercelRes;
+            },
+            json: (data: any) => {
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(data));
+            },
+            end: () => res.end(),
+          };
+
+          try {
+            await settingsHandler(vercelReq, vercelRes);
           } catch (err: any) {
             res.statusCode = 500;
             res.end(JSON.stringify({ error: err.message }));
