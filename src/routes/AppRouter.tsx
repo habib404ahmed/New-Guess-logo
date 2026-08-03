@@ -14,8 +14,18 @@ export const AppRouter: React.FC = () => {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/home" element={<HomePage />} />
+        
+        {/* Logo Game Routes */}
         <Route path="/play/logo" element={<LogoChallengePage />} />
+        <Route path="/challenge/logo" element={<LogoChallengePage />} />
+        <Route path="/challenge/logos" element={<LogoChallengePage />} />
+
+        {/* Movie Game Routes */}
         <Route path="/play/movie" element={<MovieChallengePage />} />
+        <Route path="/challenge/movie" element={<MovieChallengePage />} />
+        <Route path="/challenge/movies" element={<MovieChallengePage />} />
+
+        {/* Admin & Utility Routes */}
         <Route path="/admin/*" element={<AdminPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/thank-you" element={<ThankYouPage />} />

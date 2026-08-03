@@ -143,13 +143,17 @@ export const MovieChallengePage: React.FC = () => {
     );
   }
 
+  const currentVideoSrc = currentMovie.videoData || (currentMovie as any).videoUrl || '';
+  const currentTitle = currentMovie.title || (currentMovie as any).movieTitle || 'Untitled Movie';
+  const currentDialogue = currentMovie.dialogue || (currentMovie as any).dialogueText || 'Guess the movie from the clip!';
+
   return (
     <div className="relative min-h-screen w-full bg-[#02050e] flex flex-col justify-between p-6 overflow-hidden stage-grid ambient-bg select-none">
       <Particles count={25} />
 
       {/* Hidden preloader for next question's Cloudinary video asset */}
-      {nextMovie?.videoData && (
-        <link rel="preload" as="video" href={nextMovie.videoData} />
+      {nextMovie && (nextMovie.videoData || (nextMovie as any).videoUrl) && (
+        <link rel="preload" as="video" href={nextMovie.videoData || (nextMovie as any).videoUrl} />
       )}
 
       {/* Lighting Spotlight */}
@@ -198,7 +202,7 @@ export const MovieChallengePage: React.FC = () => {
               <div className="relative w-full aspect-video bg-slate-950 rounded-3xl border-2 border-[#00d9ff]/40 hover:border-[#00d9ff]/70 shadow-[0_0_40px_rgba(0,217,255,0.2)] overflow-hidden group flex items-center justify-center">
                 <video
                   ref={videoRef}
-                  src={currentMovie.videoData}
+                  src={currentVideoSrc}
                   controls={false}
                   preload="metadata"
                   onLoadedMetadata={() => {
@@ -230,7 +234,7 @@ export const MovieChallengePage: React.FC = () => {
                   <span>MOVIE DIALOGUE</span>
                 </div>
                 <blockquote className="text-base sm:text-lg font-semibold italic text-slate-100 leading-relaxed">
-                  "{currentMovie.dialogue}"
+                  "{currentDialogue}"
                 </blockquote>
               </div>
 
@@ -280,7 +284,7 @@ export const MovieChallengePage: React.FC = () => {
 
                       <div className="pt-1">
                         <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black uppercase tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-300 to-purple-400 drop-shadow-[0_0_30px_rgba(139,92,246,0.8)] break-words">
-                          {currentMovie.title}
+                          {currentTitle}
                         </h2>
                       </div>
                     </motion.div>
