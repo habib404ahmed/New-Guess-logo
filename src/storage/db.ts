@@ -8,8 +8,8 @@ import type { LogoItem, MovieItem } from '../types';
 const CLOUD_DB_OBJECT_ID = 'ff8081819f7e10ae019fc89f08c66ad0';
 const CLOUD_DB_URL = `https://api.restful-api.dev/objects/${CLOUD_DB_OBJECT_ID}`;
 
-const LOGOS_STORAGE_KEY = 'freshers_arena_logos_v2';
-const MOVIES_STORAGE_KEY = 'freshers_arena_movies_v2';
+const LOGOS_STORAGE_KEY = 'freshers_arena_logos_v3';
+const MOVIES_STORAGE_KEY = 'freshers_arena_movies_v3';
 
 // Local storage helpers
 const getLocalLogos = (): LogoItem[] => {
@@ -66,8 +66,6 @@ const compactLogo = (l: LogoItem): LogoItem => ({
 // ========================================================
 
 export const getAllLogos = async (): Promise<LogoItem[]> => {
-  const local = getLocalLogos();
-
   try {
     const res = await fetch(CLOUD_DB_URL);
     if (res.ok) {
@@ -79,19 +77,15 @@ export const getAllLogos = async (): Promise<LogoItem[]> => {
           imageData: l.imageUrl || l.imageData,
         }));
 
-        const map = new Map<string, LogoItem>();
-        local.forEach((l) => map.set(l.id, l));
-        cloudLogos.forEach((l) => map.set(l.id, l));
-
-        const merged = Array.from(map.values());
-        setLocalLogos(merged);
-        return merged;
+        setLocalLogos(cloudLogos);
+        return cloudLogos;
       }
     }
   } catch (err) {
     console.warn('Cloud fetch logos failed, using local fallback:', err);
   }
 
+  const local = getLocalLogos();
   return local.map((l: any) => ({
     ...l,
     name: l.title || l.name || 'Untitled Logo',
@@ -194,8 +188,6 @@ export const saveLogosOrder = async (logos: LogoItem[]): Promise<void> => {
 // ========================================================
 
 export const getAllMovies = async (): Promise<MovieItem[]> => {
-  const local = getLocalMovies();
-
   try {
     const res = await fetch(CLOUD_DB_URL);
     if (res.ok) {
@@ -208,19 +200,15 @@ export const getAllMovies = async (): Promise<MovieItem[]> => {
           dialogueText: m.dialogue || m.dialogueText,
         }));
 
-        const map = new Map<string, MovieItem>();
-        local.forEach((m) => map.set(m.id, m));
-        cloudMovies.forEach((m) => map.set(m.id, m));
-
-        const merged = Array.from(map.values());
-        setLocalMovies(merged);
-        return merged;
+        setLocalMovies(cloudMovies);
+        return cloudMovies;
       }
     }
   } catch (err) {
     console.warn('Cloud fetch movies failed, using local fallback:', err);
   }
 
+  const local = getLocalMovies();
   return local.map((m: any) => ({
     ...m,
     movieTitle: m.title || m.movieTitle,
