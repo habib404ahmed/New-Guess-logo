@@ -134,7 +134,7 @@ export const LogoManager: React.FC<LogoManagerProps> = ({ logos, onRefresh }) =>
   // Rename Logo
   const startEditing = (logo: LogoItem) => {
     setEditingId(logo.id);
-    setEditingName(logo.name);
+    setEditingName(logo.title || logo.name || '');
   };
 
   const saveRename = async (logo: LogoItem) => {
@@ -144,9 +144,14 @@ export const LogoManager: React.FC<LogoManagerProps> = ({ logos, onRefresh }) =>
     }
 
     try {
-      const updated: LogoItem = { ...logo, name: editingName.trim() };
+      const logoTitle = editingName.trim();
+      const updated: LogoItem = {
+        ...logo,
+        title: logoTitle,
+        name: logoTitle,
+      };
       await saveLogo(updated);
-      addToast('success', 'Logo Renamed', `Updated to "${editingName.trim()}" in MongoDB.`);
+      addToast('success', 'Logo Renamed', `Updated to "${logoTitle}" in Database.`);
       setEditingId(null);
       onRefresh();
     } catch (err) {
@@ -155,11 +160,11 @@ export const LogoManager: React.FC<LogoManagerProps> = ({ logos, onRefresh }) =>
     }
   };
 
-  // Delete Logo from MongoDB Atlas
+  // Delete Logo from Database
   const handleDelete = async (id: string, name: string) => {
     try {
       await deleteLogo(id);
-      addToast('info', 'Logo Deleted', `Removed "${name}" from MongoDB Atlas.`);
+      addToast('info', 'Logo Deleted', `Removed "${name}" from Database.`);
       onRefresh();
     } catch (err) {
       console.error(err);
@@ -169,7 +174,7 @@ export const LogoManager: React.FC<LogoManagerProps> = ({ logos, onRefresh }) =>
 
   // Filtered Logos
   const filteredLogos = logos.filter((logo) =>
-    logo.name.toLowerCase().includes(searchQuery.toLowerCase())
+    (logo.title || logo.name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -350,7 +355,7 @@ export const LogoManager: React.FC<LogoManagerProps> = ({ logos, onRefresh }) =>
                       <FiEdit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={() => handleDelete(logo.id, logo.name)}
+                      onClick={() => handleDelete(logo.id, logo.title || logo.name || '')}
                       className="p-1 text-slate-500 hover:text-rose-400 rounded transition-colors"
                       title="Delete Logo"
                     >

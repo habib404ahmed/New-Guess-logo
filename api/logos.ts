@@ -17,7 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const db = await getDatabase();
 
-    // GET /api/logos - Fetch all logos for any device
+    // GET /api/logos - Fetch all logos for any device (UNLIMITED)
     if (req.method === 'GET') {
       let items: any[] = [];
 
@@ -30,7 +30,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const logos = await collection.find({}).sort({ order: 1, createdAt: 1 }).toArray();
           items = logos.map((doc: any) => {
             const { _id, ...rest } = doc;
-            return rest;
+            const title = rest.title || rest.name || 'Untitled Logo';
+            const imageUrl = rest.imageUrl || rest.imageData;
+            return {
+              ...rest,
+              title,
+              name: title,
+              imageUrl,
+              imageData: imageUrl,
+            };
           });
         } catch (err) {
           console.error('FULL ERROR (GET /api/logos mongo):', err);
@@ -39,24 +47,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (!items || items.length === 0) {
-        items = await fetchCloudItems('logos');
+        const rawItems = await fetchCloudItems('logos');
+        items = (rawItems || []).map((l: any) => {
+          const title = l.title || l.name || 'Untitled Logo';
+          const imageUrl = l.imageUrl || l.imageData;
+          return {
+            ...l,
+            title,
+            name: title,
+            imageUrl,
+            imageData: imageUrl,
+          };
+        });
       }
 
       console.log('GET /api/logos returning items count:', items.length);
-      return res.status(200).json(items);
+      return res.status(200).json({ success: true, data: items });
     }
 
     // POST /api/logos - Add or update a logo document
     if (req.method === 'POST') {
       const logo = req.body;
-      if (!logo || !logo.id || !logo.imageData) {
+      const imageUrl = logo?.imageUrl || logo?.imageData;
+      const title = logo?.title || logo?.name || 'Untitled Logo';
+
+      if (!logo || !logo.id || !imageUrl) {
         console.error('❌ POST /api/logos Error: Invalid logo payload:', logo);
-        return res.status(400).json({ error: 'Invalid logo document payload' });
+        return res.status(400).json({ success: false, error: 'Invalid logo document payload' });
       }
 
       const now = Date.now();
       const document = {
         ...logo,
+        title,
+        name: title,
+        imageUrl,
+        imageData: imageUrl,
         createdAt: logo.createdAt || now,
         updatedAt: now,
       };
@@ -92,14 +118,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await saveCloudItems('logos', cloudItems);
       console.log('Saved to cloud database. Total items:', cloudItems.length);
 
-      return res.status(201).json({ success: true, logo: document });
+      return res.status(201).json({ success: true, data: document });
     }
 
-    // PUT /api/logos - Reorder or update logo document
+    // PUT /api/logos - Reorder or update logo documents
     if (req.method === 'PUT') {
       const { items } = req.body;
       if (!Array.isArray(items)) {
-        return res.status(400).json({ error: 'Expected items array for reordering' });
+        return res.status(400).json({ success: false, error: 'Expected items array for reordering' });
       }
 
       if (db) {
@@ -125,14 +151,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updatedAt: Date.now(),
       }));
       await saveCloudItems('logos', reordered);
-      return res.status(200).json({ success: true });
+      return res.status(200).json({ success: true, data: reordered });
     }
 
     // DELETE /api/logos?id=XXX - Delete logo document
     if (req.method === 'DELETE') {
       const { id } = req.query;
       if (!id || typeof id !== 'string') {
-        return res.status(400).json({ error: 'Logo ID required for deletion' });
+        return res.status(400).json({ success: false, error: 'Logo ID required for deletion' });
       }
 
       if (db) {
@@ -152,7 +178,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ success: true });
     }
 
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ success: false, error: 'Method not allowed' });
   } catch (err: any) {
     console.error('FULL ERROR:', err);
     return res.status(500).json({

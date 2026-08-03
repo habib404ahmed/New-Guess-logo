@@ -165,11 +165,11 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
   // Open Form Modal for Edit
   const openEditModal = (movie: MovieItem) => {
     setEditingMovie(movie);
-    setTitle(movie.title);
-    setDialogue(movie.dialogue);
+    setTitle(movie.title || (movie as any).movieTitle || '');
+    setDialogue(movie.dialogue || (movie as any).dialogueText || '');
     setHint(movie.hint || '');
     setSelectedFile(null);
-    setExistingVideoUrl(movie.videoData);
+    setExistingVideoUrl(movie.videoData || (movie as any).videoUrl || '');
     setSelectedFileName('Current Video Clip (Cloudinary CDN)');
     setIsAddDialogOpen(true);
   };

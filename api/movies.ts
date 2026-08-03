@@ -17,7 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const db = await getDatabase();
 
-    // GET /api/movies - Fetch all movies for any device
+    // GET /api/movies - Fetch all movies for any device (UNLIMITED)
     if (req.method === 'GET') {
       let items: any[] = [];
 
@@ -30,15 +30,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const movies = await collection.find({}).sort({ order: 1, createdAt: 1 }).toArray();
           items = movies.map((doc: any) => {
             const { _id, ...rest } = doc;
-            const videoUrl = rest.videoData || rest.videoUrl;
-            const title = rest.title || rest.movieTitle;
-            const dialogue = rest.dialogue || rest.dialogueText;
+            const videoUrl = rest.videoUrl || rest.videoData;
+            const title = rest.title || rest.movieTitle || 'Untitled Movie';
+            const dialogue = rest.dialogue || rest.dialogueText || 'Guess the movie from the clip!';
             return {
               ...rest,
               title,
+              movieTitle: title,
+              videoUrl,
               videoData: videoUrl,
-              videoUrl: videoUrl,
               dialogue,
+              dialogueText: dialogue,
             };
           });
         } catch (err) {
@@ -50,44 +52,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!items || items.length === 0) {
         const rawItems = await fetchCloudItems('movies');
         items = (rawItems || []).map((m: any) => {
-          const videoUrl = m.videoData || m.videoUrl;
-          const title = m.title || m.movieTitle;
-          const dialogue = m.dialogue || m.dialogueText;
+          const videoUrl = m.videoUrl || m.videoData;
+          const title = m.title || m.movieTitle || 'Untitled Movie';
+          const dialogue = m.dialogue || m.dialogueText || 'Guess the movie from the clip!';
           return {
             ...m,
             title,
+            movieTitle: title,
+            videoUrl,
             videoData: videoUrl,
-            videoUrl: videoUrl,
             dialogue,
+            dialogueText: dialogue,
           };
         });
       }
 
       console.log('GET /api/movies returning items count:', items.length);
       console.log('GET /api/movies payload:', items);
-      return res.status(200).json(items);
+      return res.status(200).json({ success: true, data: items });
     }
 
     // POST /api/movies - Add or update a movie document
     if (req.method === 'POST') {
       const movie = req.body;
-      const videoUrl = movie?.videoData || movie?.videoUrl;
-      const title = movie?.title || movie?.movieTitle;
+      const videoUrl = movie?.videoUrl || movie?.videoData;
+      const title = movie?.title || movie?.movieTitle || 'Untitled Movie';
       const dialogue = movie?.dialogue || movie?.dialogueText || 'Guess the movie from the clip!';
 
       if (!movie || !movie.id || !videoUrl) {
         console.error('❌ POST /api/movies Error: Invalid movie payload:', movie);
-        return res.status(400).json({ error: 'Invalid movie document payload. id and videoUrl/videoData are required.' });
+        return res.status(400).json({ success: false, error: 'Invalid movie document payload. id and videoUrl/videoData are required.' });
       }
 
       const now = Date.now();
       const document = {
         ...movie,
-        title: title,
+        title,
         movieTitle: title,
+        videoUrl,
         videoData: videoUrl,
-        videoUrl: videoUrl,
-        dialogue: dialogue,
+        dialogue,
         dialogueText: dialogue,
         createdAt: movie.createdAt || now,
         updatedAt: now,
@@ -124,14 +128,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await saveCloudItems('movies', cloudItems);
       console.log('Saved to cloud database. Total items:', cloudItems.length);
 
-      return res.status(201).json({ success: true, movie: document });
+      return res.status(201).json({ success: true, data: document });
     }
 
-    // PUT /api/movies - Reorder or update movie document
+    // PUT /api/movies - Reorder or update movie documents
     if (req.method === 'PUT') {
       const { items } = req.body;
       if (!Array.isArray(items)) {
-        return res.status(400).json({ error: 'Expected items array for reordering' });
+        return res.status(400).json({ success: false, error: 'Expected items array for reordering' });
       }
 
       if (db) {
@@ -157,14 +161,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updatedAt: Date.now(),
       }));
       await saveCloudItems('movies', reordered);
-      return res.status(200).json({ success: true });
+      return res.status(200).json({ success: true, data: reordered });
     }
 
     // DELETE /api/movies?id=XXX - Delete movie document
     if (req.method === 'DELETE') {
       const { id } = req.query;
       if (!id || typeof id !== 'string') {
-        return res.status(400).json({ error: 'Movie ID required for deletion' });
+        return res.status(400).json({ success: false, error: 'Movie ID required for deletion' });
       }
 
       if (db) {
@@ -184,7 +188,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ success: true });
     }
 
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ success: false, error: 'Method not allowed' });
   } catch (err: any) {
     console.error('FULL ERROR:', err);
     return res.status(500).json({
