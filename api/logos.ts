@@ -2,67 +2,64 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDatabase, fetchCloudItems, saveCloudItems } from './db.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS Headers for multi-device cross-origin access
+  // CORS Headers
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+  );
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  console.log(`📌 API Invocation: ${req.method} ${req.url}`);
-  console.log('Request Body:', req.body);
-
   try {
     const db = await getDatabase();
 
-    // GET /api/logos - Fetch all logos for any device (UNLIMITED)
+    // GET /api/logos - Fetch all logos (Merged MongoDB + Cloud Object Store)
     if (req.method === 'GET') {
-      let items: any[] = [];
-
+      let mongoItems: any[] = [];
       if (db) {
         try {
-          console.log('Using collection: logos');
           const collection = db.collection('logos');
-          const count = await collection.countDocuments({});
-          console.log(`Document count in logos collection: ${count}`);
-          const logos = await collection.find({}).sort({ order: 1, createdAt: 1 }).toArray();
-          items = logos.map((doc: any) => {
-            const { _id, ...rest } = doc;
-            const title = rest.title || rest.name || 'Untitled Logo';
-            const imageUrl = rest.imageUrl || rest.imageData;
-            return {
-              ...rest,
-              title,
-              name: title,
-              imageUrl,
-              imageData: imageUrl,
-            };
-          });
+          mongoItems = await collection.find({}).sort({ order: 1, createdAt: 1 }).toArray();
         } catch (err) {
-          console.error('FULL ERROR (GET /api/logos mongo):', err);
-          console.warn('MongoDB GET logos failed, loading from cloud database:', err);
+          console.error('MongoDB GET logos error:', err);
         }
       }
 
-      if (!items || items.length === 0) {
-        const rawItems = await fetchCloudItems('logos');
-        items = (rawItems || []).map((l: any) => {
-          const title = l.title || l.name || 'Untitled Logo';
-          const imageUrl = l.imageUrl || l.imageData;
-          return {
-            ...l,
-            title,
-            name: title,
-            imageUrl,
-            imageData: imageUrl,
-          };
-        });
-      }
+      const cloudItems = await fetchCloudItems('logos');
 
-      console.log('GET /api/logos returning items count:', items.length);
-      return res.status(200).json({ success: true, data: items });
+      // Merge both sources deduplicated by item.id
+      const itemMap = new Map<string, any>();
+
+      (cloudItems || []).forEach((item: any) => {
+        if (item && item.id) itemMap.set(item.id, item);
+      });
+
+      (mongoItems || []).forEach((item: any) => {
+        if (item && item.id) {
+          const { _id, ...rest } = item;
+          itemMap.set(item.id, rest);
+        }
+      });
+
+      const mergedItems = Array.from(itemMap.values()).map((l: any) => {
+        const imageUrl = l.imageUrl || l.imageData;
+        const title = l.title || l.name || 'Untitled Logo';
+        return {
+          ...l,
+          title,
+          name: title,
+          imageUrl,
+          imageData: imageUrl,
+        };
+      });
+
+      console.log('GET /api/logos returning merged items count:', mergedItems.length);
+      return res.status(200).json({ success: true, data: mergedItems });
     }
 
     // POST /api/logos - Add or update a logo document
@@ -73,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (!logo || !logo.id || !imageUrl) {
         console.error('❌ POST /api/logos Error: Invalid logo payload:', logo);
-        return res.status(400).json({ success: false, error: 'Invalid logo document payload' });
+        return res.status(400).json({ success: false, error: 'Invalid logo document payload. id and imageUrl/imageData are required.' });
       }
 
       const now = Date.now();
@@ -87,23 +84,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updatedAt: now,
       };
 
-      console.log('Saving logo payload to database:', document);
-
       if (db) {
         try {
-          console.log('Using collection: logos');
           const collection = db.collection('logos');
-          const result = await collection.updateOne(
+          await collection.updateOne(
             { id: logo.id },
             { $set: document },
             { upsert: true }
           );
-          console.log('MongoDB Insert/Update Result:', result);
-          const count = await collection.countDocuments({});
-          console.log(`Document count after insert: ${count}`);
         } catch (err) {
-          console.error('FULL ERROR (POST /api/logos mongo):', err);
-          console.warn('MongoDB POST logo failed, saving to cloud database:', err);
+          console.error('MongoDB POST logo error:', err);
         }
       }
 
@@ -116,58 +106,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         cloudItems.push(document);
       }
       await saveCloudItems('logos', cloudItems);
-      console.log('Saved to cloud database. Total items:', cloudItems.length);
 
       return res.status(201).json({ success: true, data: document });
     }
 
-    // PUT /api/logos - Reorder or update logo documents
-    if (req.method === 'PUT') {
-      const { items } = req.body;
-      if (!Array.isArray(items)) {
-        return res.status(400).json({ success: false, error: 'Expected items array for reordering' });
-      }
-
-      if (db) {
-        try {
-          console.log('Using collection: logos');
-          const collection = db.collection('logos');
-          for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            await collection.updateOne(
-              { id: item.id },
-              { $set: { ...item, order: i, updatedAt: Date.now() } },
-              { upsert: true }
-            );
-          }
-        } catch (err) {
-          console.error('FULL ERROR (PUT /api/logos mongo):', err);
-        }
-      }
-
-      const reordered = items.map((item: any, idx: number) => ({
-        ...item,
-        order: idx,
-        updatedAt: Date.now(),
-      }));
-      await saveCloudItems('logos', reordered);
-      return res.status(200).json({ success: true, data: reordered });
-    }
-
-    // DELETE /api/logos?id=XXX - Delete logo document
+    // DELETE /api/logos?id=123 - Delete a logo document
     if (req.method === 'DELETE') {
       const { id } = req.query;
       if (!id || typeof id !== 'string') {
-        return res.status(400).json({ success: false, error: 'Logo ID required for deletion' });
+        return res.status(400).json({ success: false, error: 'Logo ID parameter is required for deletion.' });
       }
 
       if (db) {
         try {
-          console.log('Using collection: logos');
           const collection = db.collection('logos');
           await collection.deleteOne({ id });
         } catch (err) {
-          console.error('FULL ERROR (DELETE /api/logos mongo):', err);
+          console.error('MongoDB DELETE logo error:', err);
         }
       }
 
@@ -175,16 +130,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const filtered = cloudItems.filter((l: any) => l.id !== id);
       await saveCloudItems('logos', filtered);
 
-      return res.status(200).json({ success: true });
+      return res.status(200).json({ success: true, message: `Logo ${id} deleted successfully.` });
     }
 
-    return res.status(405).json({ success: false, error: 'Method not allowed' });
+    // PUT /api/logos - Save complete reordered list
+    if (req.method === 'PUT') {
+      const { items } = req.body;
+      if (!Array.isArray(items)) {
+        return res.status(400).json({ success: false, error: 'Items array is required for reordering.' });
+      }
+
+      if (db) {
+        try {
+          const collection = db.collection('logos');
+          for (let i = 0; i < items.length; i++) {
+            const l = items[i];
+            await collection.updateOne(
+              { id: l.id },
+              { $set: { ...l, order: i, updatedAt: Date.now() } },
+              { upsert: true }
+            );
+          }
+        } catch (err) {
+          console.error('MongoDB PUT logos order error:', err);
+        }
+      }
+
+      await saveCloudItems('logos', items);
+      return res.status(200).json({ success: true, data: items });
+    }
+
+    return res.status(405).json({ success: false, error: 'Method Not Allowed' });
   } catch (err: any) {
-    console.error('FULL ERROR:', err);
-    return res.status(500).json({
-      success: false,
-      error: String(err?.message || err),
-      stack: err?.stack,
-    });
+    console.error('FULL SERVER ERROR (/api/logos):', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Internal Server Error' });
   }
 }

@@ -10,13 +10,24 @@ export const useStorage = () => {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      console.log('Refreshing database storage...');
       const loadedLogos = await getAllLogos();
       const loadedMovies = await getAllMovies();
-      console.log('Logos loaded:', loadedLogos);
-      console.log('Movies loaded:', loadedMovies);
-      setLogos(loadedLogos);
-      setMovies(loadedMovies);
+
+      setLogos((prev) => {
+        if (!loadedLogos || loadedLogos.length === 0) return prev;
+        const map = new Map<string, LogoItem>();
+        prev.forEach((item) => map.set(item.id, item));
+        loadedLogos.forEach((item) => map.set(item.id, item));
+        return Array.from(map.values());
+      });
+
+      setMovies((prev) => {
+        if (!loadedMovies || loadedMovies.length === 0) return prev;
+        const map = new Map<string, MovieItem>();
+        prev.forEach((item) => map.set(item.id, item));
+        loadedMovies.forEach((item) => map.set(item.id, item));
+        return Array.from(map.values());
+      });
     } catch (err) {
       console.error('Failed to load items from backend database:', err);
     } finally {
