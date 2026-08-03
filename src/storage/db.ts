@@ -5,13 +5,31 @@ import type { LogoItem, MovieItem } from '../types';
 // Cloud Name: vjqnrvyr
 // Upload Preset: freshers_upload
 // Public ID: freshers_master_db_json.json
-// Zero rate-limits, zero 500 errors, cross-device sync.
 // ========================================================
 const CLOUDINARY_RAW_UPLOAD_URL = 'https://api.cloudinary.com/v1_1/vjqnrvyr/raw/upload';
 const CLOUDINARY_RAW_FETCH_URL = 'https://res.cloudinary.com/vjqnrvyr/raw/upload/freshers_master_db_json.json';
 
 const LOGOS_STORAGE_KEY = 'freshers_arena_logos_v4';
 const MOVIES_STORAGE_KEY = 'freshers_arena_movies_v4';
+
+const ALL_MOVIE_KEYS = [
+  'freshers_arena_movies',
+  'freshers_arena_movies_v1',
+  'freshers_arena_movies_v2',
+  'freshers_arena_movies_v3',
+  'freshers_arena_movies_v4',
+];
+
+// Clear all legacy storage keys
+const clearLegacyMovieKeys = () => {
+  ALL_MOVIE_KEYS.forEach((key) => {
+    if (key !== MOVIES_STORAGE_KEY) {
+      try {
+        localStorage.removeItem(key);
+      } catch {}
+    }
+  });
+};
 
 // LocalStorage helpers
 const getLocalLogos = (): LogoItem[] => {
@@ -30,6 +48,7 @@ const setLocalLogos = (items: LogoItem[]) => {
 };
 
 const getLocalMovies = (): MovieItem[] => {
+  clearLegacyMovieKeys();
   try {
     const raw = localStorage.getItem(MOVIES_STORAGE_KEY);
     return raw ? JSON.parse(raw) : [];
@@ -203,8 +222,18 @@ export const saveMovie = async (movie: MovieItem): Promise<string> => {
 };
 
 export const deleteMovie = async (id: string): Promise<void> => {
-  const local = getLocalMovies().filter((m) => m.id !== id);
-  setLocalMovies(local);
+  ALL_MOVIE_KEYS.forEach((key) => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter((m: any) => m.id !== id);
+          localStorage.setItem(key, JSON.stringify(filtered));
+        }
+      }
+    } catch {}
+  });
 
   const payload = await fetchCloudPayload();
   payload.movies = payload.movies.filter((m: any) => m.id !== id);
