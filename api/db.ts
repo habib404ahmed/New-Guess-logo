@@ -62,7 +62,7 @@ export const getDatabase = async () => {
 // GLOBAL CLOUD METADATA STORE (Cloudinary + Backend REST DB)
 // Master database object for Freshers Arena cross-device sync
 // ========================================================
-const CLOUD_DB_OBJECT_ID = 'ff8081819f7e10ae019fc86b498a6a8f';
+const CLOUD_DB_OBJECT_ID = 'ff8081819f7e10ae019fc89f08c66ad0';
 const CLOUD_DB_URL = `https://api.restful-api.dev/objects/${CLOUD_DB_OBJECT_ID}`;
 
 export const fetchCloudItems = async (key: 'logos' | 'movies' | 'settings'): Promise<any> => {
