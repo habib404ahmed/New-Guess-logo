@@ -1,9 +1,6 @@
 // Cloudinary Upload Utility for Unsigned Uploads
 // Cloud Name: vjqnrvyr
 // Upload Preset: freshers_upload
-// Endpoints:
-//   Videos: https://api.cloudinary.com/v1_1/vjqnrvyr/video/upload
-//   Images: https://api.cloudinary.com/v1_1/vjqnrvyr/image/upload
 
 export interface UploadOptions {
   onProgress?: (progressPercent: number) => void;
@@ -25,69 +22,74 @@ export const uploadToCloudinary = async (
   console.log('File size:', file.size);
 
   const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(file.name);
-  const resourceType = isVideo ? 'video' : 'auto';
-  const targetUrl = `https://api.cloudinary.com/v1_1/vjqnrvyr/${resourceType}/upload`;
+  
+  // Try auto/upload first, then video/upload as fallback for maximum compatibility
+  const endpoints = isVideo
+    ? [
+        'https://api.cloudinary.com/v1_1/vjqnrvyr/auto/upload',
+        'https://api.cloudinary.com/v1_1/vjqnrvyr/video/upload',
+      ]
+    : [
+        'https://api.cloudinary.com/v1_1/vjqnrvyr/auto/upload',
+        'https://api.cloudinary.com/v1_1/vjqnrvyr/image/upload',
+      ];
 
-  console.log('Cloud Name:', 'vjqnrvyr');
-  console.log('Upload Preset:', 'freshers_upload');
-  console.log('Resource Type:', resourceType);
-  console.log('Endpoint URL:', targetUrl);
+  let lastError: Error | null = null;
 
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('upload_preset', 'freshers_upload');
+  for (const targetUrl of endpoints) {
+    try {
+      console.log('Attempting Cloudinary upload to:', targetUrl);
 
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', targetUrl);
+      const secureUrl = await new Promise<string>((resolve, reject) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', 'freshers_upload');
 
-    if (options?.onProgress && xhr.upload) {
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          const percent = Math.round((event.loaded / event.total) * 100);
-          options.onProgress?.(percent);
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', targetUrl);
+
+        if (options?.onProgress && xhr.upload) {
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+              const percent = Math.round((event.loaded / event.total) * 100);
+              options.onProgress?.(percent);
+            }
+          };
         }
-      };
-    }
 
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const response = JSON.parse(xhr.responseText);
-          console.log('Cloudinary response:', response);
-          console.log('secure_url:', response.secure_url);
-          console.log('public_id:', response.public_id);
-          console.log('asset_id:', response.asset_id);
-          console.log('resource_type:', response.resource_type);
-
-          if (response.secure_url) {
-            console.log('✅ Upload Succeeded! Uploading metadata to MongoDB...');
-            resolve(response.secure_url);
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const response = JSON.parse(xhr.responseText);
+              console.log('Cloudinary response:', response);
+              if (response.secure_url) {
+                console.log('✅ Upload Succeeded! secure_url:', response.secure_url);
+                resolve(response.secure_url);
+              } else {
+                reject(new Error('Cloudinary response missing secure_url field'));
+              }
+            } catch (err) {
+              reject(new Error('Failed to parse Cloudinary response JSON'));
+            }
           } else {
-            console.error('❌ Cloudinary Error: Missing secure_url field:', response);
-            reject(new Error('Cloudinary response missing secure_url field'));
+            console.error(`Cloudinary upload failed on ${targetUrl} (HTTP ${xhr.status}):`, xhr.responseText);
+            reject(new Error(`Cloudinary upload failed (HTTP ${xhr.status}): ${xhr.responseText}`));
           }
-        } catch (err) {
-          console.error('❌ Cloudinary JSON Parse Error:', err, xhr.responseText);
-          reject(new Error('Failed to parse Cloudinary response JSON'));
-        }
-      } else {
-        console.error('❌ Cloudinary Upload Failed:');
-        console.error('xhr.status:', xhr.status);
-        console.error('xhr.responseText:', xhr.responseText);
-        console.error('xhr.readyState:', xhr.readyState);
-        reject(new Error(`Cloudinary upload failed (HTTP ${xhr.status}): ${xhr.responseText}`));
-      }
-    };
+        };
 
-    xhr.onerror = () => {
-      console.error('❌ Cloudinary Network/CORS Error:');
-      console.error('xhr.status:', xhr.status);
-      console.error('xhr.responseText:', xhr.responseText);
-      console.error('xhr.readyState:', xhr.readyState);
-      reject(new Error('Network or CORS error occurred during Cloudinary upload'));
-    };
+        xhr.onerror = () => {
+          reject(new Error('Network or CORS error occurred during Cloudinary upload'));
+        };
 
-    xhr.send(formData);
-  });
+        xhr.send(formData);
+      });
+
+      return secureUrl;
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`Endpoint ${targetUrl} failed, trying fallback...`, err);
+    }
+  }
+
+  throw lastError || new Error('All Cloudinary upload endpoints failed');
 };

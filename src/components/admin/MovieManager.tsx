@@ -26,6 +26,7 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, setMovies, o
   const [title, setTitle] = useState('');
   const [dialogue, setDialogue] = useState('');
   const [hint, setHint] = useState('');
+  const [videoUrlInput, setVideoUrlInput] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [existingVideoUrl, setExistingVideoUrl] = useState<string>('');
   const [selectedFileName, setSelectedFileName] = useState<string>('');
@@ -169,6 +170,7 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, setMovies, o
     setTitle('');
     setDialogue('');
     setHint('');
+    setVideoUrlInput('');
     setSelectedFile(null);
     setExistingVideoUrl('');
     setSelectedFileName('');
@@ -181,6 +183,7 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, setMovies, o
     setTitle(movie.title || (movie as any).movieTitle || '');
     setDialogue(movie.dialogue || (movie as any).dialogueText || '');
     setHint(movie.hint || '');
+    setVideoUrlInput(movie.videoData || (movie as any).videoUrl || '');
     setSelectedFile(null);
     setExistingVideoUrl(movie.videoData || (movie as any).videoUrl || '');
     setSelectedFileName('Current Video Clip (Cloudinary CDN)');
@@ -193,16 +196,17 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, setMovies, o
       addToast('error', 'Movie Title Required', 'Please enter a movie title.');
       return;
     }
-    if (!selectedFile && !existingVideoUrl) {
-      addToast('error', 'Video Required', 'Please select a video file for this movie entry.');
+
+    let videoUrl = videoUrlInput.trim() || existingVideoUrl;
+
+    if (!selectedFile && !videoUrl) {
+      addToast('error', 'Video Required', 'Please select a video file or paste a video URL for this movie entry.');
       return;
     }
 
     try {
       setIsUploading(true);
       setUploadProgress(0);
-
-      let videoUrl = existingVideoUrl;
 
       // 1. Upload to Cloudinary if new file selected
       if (selectedFile) {
@@ -529,10 +533,17 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, setMovies, o
             onChange={(e) => setHint(e.target.value)}
           />
 
+          <Input
+            label="Video URL / Cloudinary Direct Link"
+            placeholder="e.g. https://res.cloudinary.com/vjqnrvyr/video/upload/... or select video file below"
+            value={videoUrlInput}
+            onChange={(e) => setVideoUrlInput(e.target.value)}
+          />
+
           {/* Video File Picker */}
           <div>
             <label className="text-xs font-semibold tracking-wider text-slate-300 uppercase block mb-1.5">
-              Video Clip File (Uploads to Cloudinary)
+              OR Upload Video Clip File (Uploads to Cloudinary)
             </label>
             <input
               type="file"
