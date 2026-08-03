@@ -28,6 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return rest;
           });
         } catch (err) {
+          console.error('FULL ERROR (GET /api/movies mongo):', err);
           console.warn('MongoDB GET movies failed, loading from cloud database:', err);
         }
       }
@@ -63,6 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             { upsert: true }
           );
         } catch (err) {
+          console.error('FULL ERROR (POST /api/movies mongo):', err);
           console.warn('MongoDB POST movie failed, saving to cloud database:', err);
         }
       }
@@ -100,7 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             );
           }
         } catch (err) {
-          console.warn('MongoDB PUT movies failed:', err);
+          console.error('FULL ERROR (PUT /api/movies mongo):', err);
         }
       }
 
@@ -126,7 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const collection = db.collection('movies');
           await collection.deleteOne({ id });
         } catch (err) {
-          console.warn('MongoDB DELETE movie failed:', err);
+          console.error('FULL ERROR (DELETE /api/movies mongo):', err);
         }
       }
 
@@ -139,7 +141,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (err: any) {
-    console.error('FULL ERROR (api/movies):', err);
+    console.error('FULL ERROR:', err);
     return res.status(500).json({
       success: false,
       error: String(err?.message || err),

@@ -28,6 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return rest;
           });
         } catch (err) {
+          console.error('FULL ERROR (GET /api/logos mongo):', err);
           console.warn('MongoDB GET logos failed, loading from cloud database:', err);
         }
       }
@@ -63,6 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             { upsert: true }
           );
         } catch (err) {
+          console.error('FULL ERROR (POST /api/logos mongo):', err);
           console.warn('MongoDB POST logo failed, saving to cloud database:', err);
         }
       }
@@ -100,7 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             );
           }
         } catch (err) {
-          console.warn('MongoDB PUT logos failed:', err);
+          console.error('FULL ERROR (PUT /api/logos mongo):', err);
         }
       }
 
@@ -126,7 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const collection = db.collection('logos');
           await collection.deleteOne({ id });
         } catch (err) {
-          console.warn('MongoDB DELETE logo failed:', err);
+          console.error('FULL ERROR (DELETE /api/logos mongo):', err);
         }
       }
 
@@ -139,7 +141,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (err: any) {
-    console.error('FULL ERROR (api/logos):', err);
+    console.error('FULL ERROR:', err);
     return res.status(500).json({
       success: false,
       error: String(err?.message || err),

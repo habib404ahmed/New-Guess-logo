@@ -7,13 +7,10 @@ declare const process: {
 };
 
 // Check Vercel Environment Variables
-console.log('----------------------------------------------------');
-console.log('📌 Vercel Backend Init Check:');
-console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'Defined OK' : 'Missing (Using Cloud Fallback)');
-console.log('CLOUDINARY_CLOUD_NAME:', process.env.CLOUDINARY_CLOUD_NAME ? 'Defined OK' : 'Missing (Using default vjqnrvyr)');
-console.log('CLOUDINARY_API_KEY:', process.env.CLOUDINARY_API_KEY ? 'Defined OK' : 'Missing');
-console.log('CLOUDINARY_API_SECRET:', process.env.CLOUDINARY_API_SECRET ? 'Defined OK' : 'Missing');
-console.log('----------------------------------------------------');
+console.log(process.env.MONGODB_URI ? 'Mongo URI OK' : 'Mongo URI Missing');
+console.log(process.env.CLOUDINARY_CLOUD_NAME ? 'Cloudinary Cloud Name OK' : 'Cloudinary Cloud Name Missing');
+console.log(process.env.CLOUDINARY_API_KEY ? 'Cloudinary API Key OK' : 'Cloudinary API Key Missing');
+console.log(process.env.CLOUDINARY_API_SECRET ? 'Cloudinary API Secret OK' : 'Cloudinary API Secret Missing');
 
 const MONGODB_URI = process.env.MONGODB_URI || '';
 
@@ -23,11 +20,15 @@ let clientPromise: Promise<MongoClient> | null = null;
 export const getMongoClient = async (): Promise<MongoClient | null> => {
   const uri = process.env.MONGODB_URI || MONGODB_URI;
   if (!uri) {
+    console.log('Connection Failed (MONGODB_URI is empty)');
     return null;
   }
 
   try {
-    if (client) return client;
+    if (client) {
+      console.log('Connected (Reusing client)');
+      return client;
+    }
     if (!clientPromise) {
       client = new MongoClient(uri, {
         serverSelectionTimeoutMS: 2000,
@@ -35,10 +36,11 @@ export const getMongoClient = async (): Promise<MongoClient | null> => {
       clientPromise = client.connect();
     }
     const connectedClient = await clientPromise;
-    console.log('✅ MongoDB Connection Status: Connected');
+    console.log('Connected');
     return connectedClient;
   } catch (err: any) {
-    console.error('❌ MongoDB Connection Failed:', err?.message || err);
+    console.error('Connection Failed:', err?.message || err);
+    console.error('FULL ERROR:', err);
     client = null;
     clientPromise = null;
     return null;
@@ -52,7 +54,7 @@ export const getDatabase = async () => {
       return mongoClient.db('freshers_arena');
     }
   } catch (err) {
-    console.error('❌ getDatabase Error:', err);
+    console.error('FULL ERROR (getDatabase):', err);
   }
   return null;
 };
