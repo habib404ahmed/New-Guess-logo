@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Button, Input, Textarea, SearchInput, Dialog, ToastContainer, type ToastMessage } from '../shared';
-import { saveMovie, deleteMovie, saveMoviesOrder, getAllMovies } from '../../storage/db';
+import { saveMovie, deleteMovie, saveMoviesOrder } from '../../storage/db';
 import type { MovieItem } from '../../types';
 import { generateId } from '../../utils/helpers';
 import { uploadToCloudinary } from '../../utils/cloudinary';
@@ -67,7 +67,7 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
         setUploadStatusText(`Uploading video ${i + 1}/${videoFiles.length}: "${file.name}" to Cloudinary...`);
 
         try {
-          // STEP 1: Upload video to Cloudinary
+          // 1. Upload video to Cloudinary
           const secureUrl = await uploadToCloudinary(file, {
             onProgress: (percent) => {
               const totalPercent = Math.round(((i + percent / 100) / videoFiles.length) * 100);
@@ -75,7 +75,7 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
             },
           });
 
-          // STEP 2: Save metadata + Cloudinary URL to MongoDB Atlas / Cloud DB
+          // 2. Save metadata + Cloudinary URL to Database
           const newMovie: MovieItem = {
             id: generateId(),
             title: cleanTitle,
@@ -87,36 +87,24 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
           };
 
           await saveMovie(newMovie);
-
-          // STEP 3: Confirm inserted document via GET /api/movies
-          const verifiedMovies = await getAllMovies();
-          const exists = verifiedMovies.some((m) => m.id === newMovie.id || m.title === newMovie.title);
-
-          if (exists) {
-            console.log('✅ STEP 3 Confirmed: Inserted movie exists in GET /api/movies!');
-            importedCount++;
-          } else {
-            console.error('❌ STEP 3 Failed: GET /api/movies did not confirm movie:', newMovie.id);
-            failedCount++;
-          }
+          importedCount++;
         } catch (uploadErr) {
           console.error(`Failed to upload video ${file.name}:`, uploadErr);
           failedCount++;
         }
       }
 
-      // STEP 4: Update React state and display success toast ONLY after verification
       if (importedCount > 0) {
         addToast(
           'success',
           'Cloudinary Video Upload Complete',
-          `Successfully uploaded and verified ${importedCount} video clip(s) in Database.`
+          `Successfully uploaded ${importedCount} video clip(s) to Cloudinary & Database.`
         );
         onRefresh();
       }
 
       if (failedCount > 0) {
-        addToast('error', 'Upload Errors Encountered', `${failedCount} video(s) failed to verify.`);
+        addToast('error', 'Upload Errors Encountered', `${failedCount} video(s) failed to upload.`);
       }
     } catch (err) {
       console.error('Failed batch video upload:', err);
@@ -203,7 +191,7 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
 
       let videoUrl = existingVideoUrl;
 
-      // STEP 1: Upload to Cloudinary if new file selected
+      // 1. Upload to Cloudinary if new file selected
       if (selectedFile) {
         setUploadStatusText(`Uploading video "${selectedFile.name}" to Cloudinary...`);
         videoUrl = await uploadToCloudinary(selectedFile, {
@@ -221,18 +209,9 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
         createdAt: editingMovie ? editingMovie.createdAt : Date.now(),
       };
 
-      // STEP 2: POST /api/movies
+      // 2. Save to Database
       await saveMovie(movieItem);
 
-      // STEP 3: Verify GET /api/movies returns inserted document
-      const verifiedMovies = await getAllMovies();
-      const exists = verifiedMovies.some((m) => m.id === movieItem.id || m.title === movieItem.title);
-
-      if (!exists) {
-        throw new Error('Database verification (GET /api/movies) did not return the inserted movie.');
-      }
-
-      // STEP 4: Toast & State refresh
       addToast('success', editingMovie ? 'Movie Updated' : 'Movie Created', `Saved "${movieItem.title}" to Database.`);
       setIsAddDialogOpen(false);
       onRefresh();
@@ -277,11 +256,8 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
     }
   };
 
-  // Filtered Movies & State Trace Logging
-  console.log('Movies from API:', movies);
-  console.log('Movie Count:', movies.length);
+  // Filtered Movies
   console.log('Movie state:', movies);
-
   const filteredMovies = movies.filter((m) => {
     const titleStr = m.title || (m as any).movieTitle || '';
     const dialogueStr = m.dialogue || (m as any).dialogueText || '';
