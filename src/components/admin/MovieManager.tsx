@@ -8,7 +8,7 @@ import { FiFilm, FiPlus, FiFolderPlus, FiTrash2, FiEdit2, FiEye, FiArrowUp, FiAr
 
 export interface MovieManagerProps {
   movies: MovieItem[];
-  onRefresh: () => void;
+  onRefresh: () => Promise<void> | void;
 }
 
 export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh }) => {
@@ -79,8 +79,11 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
           const newMovie: MovieItem = {
             id: generateId(),
             title: cleanTitle,
+            movieTitle: cleanTitle,
             videoData: secureUrl,
+            videoUrl: secureUrl,
             dialogue: `Guess the iconic movie for clip: "${cleanTitle}"`,
+            dialogueText: `Guess the iconic movie for clip: "${cleanTitle}"`,
             hint: 'Listen closely to the dialogue!',
             order: movies.length + importedCount,
             createdAt: Date.now() + i,
@@ -95,12 +98,13 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
       }
 
       if (importedCount > 0) {
+        // Await state refresh FIRST so that movies state & cards update before toast renders
+        await onRefresh();
         addToast(
           'success',
           'Cloudinary Video Upload Complete',
           `Successfully uploaded ${importedCount} video clip(s) to Cloudinary & Database.`
         );
-        onRefresh();
       }
 
       if (failedCount > 0) {
@@ -202,9 +206,12 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
       const movieItem: MovieItem = {
         id: editingMovie ? editingMovie.id : generateId(),
         title: title.trim(),
+        movieTitle: title.trim(),
         dialogue: dialogue.trim() || 'Guess the movie from the clip!',
+        dialogueText: dialogue.trim() || 'Guess the movie from the clip!',
         hint: hint.trim() || undefined,
         videoData: videoUrl,
+        videoUrl: videoUrl,
         order: editingMovie ? editingMovie.order : movies.length,
         createdAt: editingMovie ? editingMovie.createdAt : Date.now(),
       };
@@ -212,9 +219,11 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
       // 2. Save to Database
       await saveMovie(movieItem);
 
+      // Await refresh FIRST so state updates before dialog closes & toast triggers
+      await onRefresh();
+
       addToast('success', editingMovie ? 'Movie Updated' : 'Movie Created', `Saved "${movieItem.title}" to Database.`);
       setIsAddDialogOpen(false);
-      onRefresh();
     } catch (err) {
       console.error('Failed to save movie form:', err);
       addToast('error', 'Save Failed', 'Could not upload video or save movie to Database.');
@@ -229,8 +238,8 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
   const handleDelete = async (id: string, titleStr: string) => {
     try {
       await deleteMovie(id);
+      await onRefresh();
       addToast('info', 'Movie Deleted', `Removed "${titleStr}" from Database.`);
-      onRefresh();
     } catch (err) {
       console.error(err);
       addToast('error', 'Delete Failed', 'Could not remove movie.');
@@ -249,7 +258,7 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
       reordered[targetIndex] = temp;
 
       await saveMoviesOrder(reordered);
-      onRefresh();
+      await onRefresh();
     } catch (err) {
       console.error(err);
       addToast('error', 'Reorder Failed', 'Could not save new movie order.');
@@ -462,7 +471,7 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
                   size="sm"
                   variant="danger"
                   leftIcon={<FiTrash2 />}
-                  onClick={() => handleDelete(movie.id, movie.title || (movie as any).movieTitle)}
+                  onClick={() => handleDelete(movie.id, movie.title || (movie as any).movieTitle || '')}
                 >
                   Delete
                 </Button>
