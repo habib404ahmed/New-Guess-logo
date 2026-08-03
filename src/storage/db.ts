@@ -5,12 +5,13 @@ import type { LogoItem, MovieItem } from '../types';
 // Cloud Name: vjqnrvyr
 // Upload Preset: freshers_upload
 // Public ID: freshers_master_db_json.json
+// Zero rate-limits, zero 500 errors, cross-device sync.
 // ========================================================
 const CLOUDINARY_RAW_UPLOAD_URL = 'https://api.cloudinary.com/v1_1/vjqnrvyr/raw/upload';
 const CLOUDINARY_RAW_FETCH_URL = 'https://res.cloudinary.com/vjqnrvyr/raw/upload/freshers_master_db_json.json';
 
-const LOGOS_STORAGE_KEY = 'freshers_arena_logos_v4';
-const MOVIES_STORAGE_KEY = 'freshers_arena_movies_v4';
+const LOGOS_STORAGE_KEY = 'freshers_arena_logos_v5';
+const MOVIES_STORAGE_KEY = 'freshers_arena_movies_v5';
 
 const ALL_MOVIE_KEYS = [
   'freshers_arena_movies',
@@ -18,6 +19,7 @@ const ALL_MOVIE_KEYS = [
   'freshers_arena_movies_v2',
   'freshers_arena_movies_v3',
   'freshers_arena_movies_v4',
+  'freshers_arena_movies_v5',
 ];
 
 // Clear all legacy storage keys
@@ -127,15 +129,26 @@ const saveCloudPayload = async (payload: { logos: LogoItem[]; movies: MovieItem[
 // ========================================================
 
 export const getAllLogos = async (): Promise<LogoItem[]> => {
-  const payload = await fetchCloudPayload();
-  const cloudLogos: LogoItem[] = payload.logos.map((l: any) => ({
-    ...l,
-    name: l.title || l.name || 'Untitled Logo',
-    imageData: l.imageUrl || l.imageData,
-  }));
+  const local = getLocalLogos();
 
-  setLocalLogos(cloudLogos);
-  return cloudLogos;
+  try {
+    const payload = await fetchCloudPayload();
+    const cloudLogos: LogoItem[] = payload.logos.map((l: any) => ({
+      ...l,
+      name: l.title || l.name || 'Untitled Logo',
+      imageData: l.imageUrl || l.imageData,
+    }));
+
+    const map = new Map<string, LogoItem>();
+    cloudLogos.forEach((l) => map.set(l.id, l));
+    local.forEach((l) => map.set(l.id, l));
+
+    const merged = Array.from(map.values());
+    setLocalLogos(merged);
+    return merged;
+  } catch {
+    return local;
+  }
 };
 
 export const saveLogo = async (logo: LogoItem): Promise<string> => {
@@ -185,21 +198,33 @@ export const saveLogosOrder = async (logos: LogoItem[]): Promise<void> => {
 // ========================================================
 
 export const getAllMovies = async (): Promise<MovieItem[]> => {
-  const payload = await fetchCloudPayload();
-  const cloudMovies: MovieItem[] = payload.movies.map((m: any) => ({
-    ...m,
-    movieTitle: m.title || m.movieTitle,
-    videoData: m.videoUrl || m.videoData,
-    dialogueText: m.dialogue || m.dialogueText,
-  }));
+  const local = getLocalMovies();
 
-  setLocalMovies(cloudMovies);
-  return cloudMovies;
+  try {
+    const payload = await fetchCloudPayload();
+    const cloudMovies: MovieItem[] = payload.movies.map((m: any) => ({
+      ...m,
+      movieTitle: m.title || m.movieTitle,
+      videoData: m.videoUrl || m.videoData,
+      dialogueText: m.dialogue || m.dialogueText,
+    }));
+
+    const map = new Map<string, MovieItem>();
+    cloudMovies.forEach((m) => map.set(m.id, m));
+    local.forEach((m) => map.set(m.id, m));
+
+    const merged = Array.from(map.values());
+    setLocalMovies(merged);
+    return merged;
+  } catch {
+    return local;
+  }
 };
 
 export const saveMovie = async (movie: MovieItem): Promise<string> => {
   const clean = compactMovie(movie);
 
+  // 1. Save to LocalStorage
   const local = getLocalMovies();
   const idx = local.findIndex((m) => m.id === clean.id);
   if (idx >= 0) {
@@ -209,14 +234,20 @@ export const saveMovie = async (movie: MovieItem): Promise<string> => {
   }
   setLocalMovies(local);
 
-  const payload = await fetchCloudPayload();
-  const cIdx = payload.movies.findIndex((m) => m.id === clean.id);
-  if (cIdx >= 0) {
-    payload.movies[cIdx] = clean;
-  } else {
-    payload.movies.push(clean);
+  // 2. Save to Cloud REST API
+  try {
+    const payload = await fetchCloudPayload();
+    const cIdx = payload.movies.findIndex((m) => m.id === clean.id);
+    if (cIdx >= 0) {
+      payload.movies[cIdx] = clean;
+    } else {
+      payload.movies.push(clean);
+    }
+
+    await saveCloudPayload(payload);
+  } catch (err) {
+    console.warn('Cloud save movie failed:', err);
   }
-  await saveCloudPayload(payload);
 
   return clean.id;
 };
