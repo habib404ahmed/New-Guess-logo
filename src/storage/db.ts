@@ -1,115 +1,192 @@
 import type { LogoItem, MovieItem } from '../types';
 
 // ========================================================
-// GLOBAL MASTER CLOUD DATABASE ENDPOINT
+// GLOBAL MASTER CLOUD DATABASE & LOCAL DUAL SYNC
 // Unsigned Cloud REST Storage (Master ID: ff8081819f7e10ae019fc89f08c66ad0)
-// Works seamlessly across all client devices and serverless environments.
+// LocalStorage caching for 0ms instant loading & offline resilience.
 // ========================================================
 const CLOUD_DB_OBJECT_ID = 'ff8081819f7e10ae019fc89f08c66ad0';
 const CLOUD_DB_URL = `https://api.restful-api.dev/objects/${CLOUD_DB_OBJECT_ID}`;
 
-// Helper: Fetch cloud DB payload directly from REST endpoint
-const fetchCloudPayload = async (): Promise<{ logos: LogoItem[]; movies: MovieItem[]; settings: any }> => {
+const LOGOS_STORAGE_KEY = 'freshers_arena_logos_v2';
+const MOVIES_STORAGE_KEY = 'freshers_arena_movies_v2';
+
+// Local storage helpers
+const getLocalLogos = (): LogoItem[] => {
   try {
-    const res = await fetch(CLOUD_DB_URL);
-    if (res.ok) {
-      const json = await res.json();
-      if (json && json.data && typeof json.data === 'object') {
-        return {
-          logos: Array.isArray(json.data.logos) ? json.data.logos : [],
-          movies: Array.isArray(json.data.movies) ? json.data.movies : [],
-          settings: json.data.settings || {},
-        };
-      }
-    }
-  } catch (err) {
-    console.warn('Failed to fetch cloud payload:', err);
+    const raw = localStorage.getItem(LOGOS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
   }
-  return { logos: [], movies: [], settings: {} };
 };
 
-// Helper: Save cloud DB payload directly to REST endpoint
-const saveCloudPayload = async (payload: { logos: LogoItem[]; movies: MovieItem[]; settings: any }): Promise<boolean> => {
+const setLocalLogos = (items: LogoItem[]) => {
   try {
-    const putRes = await fetch(CLOUD_DB_URL, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: 'freshers_arena_master_db',
-        data: payload,
-      }),
-    });
-    return putRes.ok;
-  } catch (err) {
-    console.warn('Failed to save cloud payload:', err);
-    return false;
+    localStorage.setItem(LOGOS_STORAGE_KEY, JSON.stringify(items));
+  } catch {}
+};
+
+const getLocalMovies = (): MovieItem[] => {
+  try {
+    const raw = localStorage.getItem(MOVIES_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
   }
 };
+
+const setLocalMovies = (items: MovieItem[]) => {
+  try {
+    localStorage.setItem(MOVIES_STORAGE_KEY, JSON.stringify(items));
+  } catch {}
+};
+
+// Compact object formatters (eliminates redundant duplicate field bloat)
+const compactMovie = (m: MovieItem): MovieItem => ({
+  id: m.id,
+  title: (m.title || (m as any).movieTitle || 'Untitled Movie').trim(),
+  dialogue: (m.dialogue || (m as any).dialogueText || 'Guess the movie from the clip!').trim(),
+  videoUrl: (m.videoUrl || m.videoData || '').trim(),
+  hint: m.hint ? m.hint.trim() : undefined,
+  order: m.order ?? 0,
+  createdAt: m.createdAt || Date.now(),
+});
+
+const compactLogo = (l: LogoItem): LogoItem => ({
+  id: l.id,
+  title: (l.title || l.name || 'Untitled Logo').trim(),
+  imageUrl: (l.imageUrl || l.imageData || '').trim(),
+  order: l.order ?? 0,
+  createdAt: l.createdAt || Date.now(),
+});
 
 // ========================================================
 // LOGO BACKEND DATABASE OPERATIONS
 // ========================================================
 
 export const getAllLogos = async (): Promise<LogoItem[]> => {
-  // 1. Try serverless endpoint
+  const local = getLocalLogos();
+
   try {
-    const res = await fetch('/api/logos');
+    const res = await fetch(CLOUD_DB_URL);
     if (res.ok) {
       const json = await res.json();
-      if (json && json.success && Array.isArray(json.data) && json.data.length > 0) {
-        return json.data;
-      }
-      if (Array.isArray(json) && json.length > 0) return json;
-    }
-  } catch {}
+      if (json && json.data && Array.isArray(json.data.logos)) {
+        const cloudLogos: LogoItem[] = json.data.logos.map((l: any) => ({
+          ...l,
+          name: l.title || l.name || 'Untitled Logo',
+          imageData: l.imageUrl || l.imageData,
+        }));
 
-  // 2. Direct Cloud REST API fallback
-  const payload = await fetchCloudPayload();
-  return payload.logos.map((l: any) => ({
+        const map = new Map<string, LogoItem>();
+        local.forEach((l) => map.set(l.id, l));
+        cloudLogos.forEach((l) => map.set(l.id, l));
+
+        const merged = Array.from(map.values());
+        setLocalLogos(merged);
+        return merged;
+      }
+    }
+  } catch (err) {
+    console.warn('Cloud fetch logos failed, using local fallback:', err);
+  }
+
+  return local.map((l: any) => ({
     ...l,
-    title: l.title || l.name || 'Untitled Logo',
     name: l.title || l.name || 'Untitled Logo',
-    imageUrl: l.imageUrl || l.imageData,
     imageData: l.imageUrl || l.imageData,
   }));
 };
 
 export const saveLogo = async (logo: LogoItem): Promise<string> => {
-  const payload = await fetchCloudPayload();
-  const idx = payload.logos.findIndex((l) => l.id === logo.id);
+  const clean = compactLogo(logo);
+
+  // 1. Save to LocalStorage
+  const local = getLocalLogos();
+  const idx = local.findIndex((l) => l.id === clean.id);
   if (idx >= 0) {
-    payload.logos[idx] = logo;
+    local[idx] = clean;
   } else {
-    payload.logos.push(logo);
+    local.push(clean);
   }
-  await saveCloudPayload(payload);
+  setLocalLogos(local);
 
-  // Background sync with serverless endpoint
+  // 2. Save to Cloud REST API
   try {
-    fetch('/api/logos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(logo),
-    }).catch(() => {});
-  } catch {}
+    const res = await fetch(CLOUD_DB_URL);
+    if (res.ok) {
+      const json = await res.json();
+      const currentData = json.data || { logos: [], movies: [], settings: {} };
+      const cloudLogos: LogoItem[] = Array.isArray(currentData.logos) ? currentData.logos : [];
+      const cIdx = cloudLogos.findIndex((l) => l.id === clean.id);
+      if (cIdx >= 0) {
+        cloudLogos[cIdx] = clean;
+      } else {
+        cloudLogos.push(clean);
+      }
+      currentData.logos = cloudLogos;
 
-  return logo.id;
+      await fetch(CLOUD_DB_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'freshers_arena_master_db',
+          data: currentData,
+        }),
+      });
+    }
+  } catch (err) {
+    console.warn('Cloud save logo failed:', err);
+  }
+
+  return clean.id;
 };
 
 export const deleteLogo = async (id: string): Promise<void> => {
-  const payload = await fetchCloudPayload();
-  payload.logos = payload.logos.filter((l) => l.id !== id);
-  await saveCloudPayload(payload);
+  const local = getLocalLogos().filter((l) => l.id !== id);
+  setLocalLogos(local);
 
   try {
-    fetch(`/api/logos?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
-  } catch {}
+    const res = await fetch(CLOUD_DB_URL);
+    if (res.ok) {
+      const json = await res.json();
+      const currentData = json.data || { logos: [], movies: [], settings: {} };
+      currentData.logos = (currentData.logos || []).filter((l: any) => l.id !== id);
+      await fetch(CLOUD_DB_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'freshers_arena_master_db',
+          data: currentData,
+        }),
+      });
+    }
+  } catch (err) {
+    console.warn('Cloud delete logo failed:', err);
+  }
 };
 
 export const saveLogosOrder = async (logos: LogoItem[]): Promise<void> => {
-  const payload = await fetchCloudPayload();
-  payload.logos = logos.map((item, idx) => ({ ...item, order: idx }));
-  await saveCloudPayload(payload);
+  const ordered = logos.map((item, idx) => ({ ...compactLogo(item), order: idx }));
+  setLocalLogos(ordered);
+
+  try {
+    const res = await fetch(CLOUD_DB_URL);
+    if (res.ok) {
+      const json = await res.json();
+      const currentData = json.data || { logos: [], movies: [], settings: {} };
+      currentData.logos = ordered;
+      await fetch(CLOUD_DB_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'freshers_arena_master_db',
+          data: currentData,
+        }),
+      });
+    }
+  } catch {}
 };
 
 // ========================================================
@@ -117,65 +194,127 @@ export const saveLogosOrder = async (logos: LogoItem[]): Promise<void> => {
 // ========================================================
 
 export const getAllMovies = async (): Promise<MovieItem[]> => {
-  // 1. Try serverless endpoint
+  const local = getLocalMovies();
+
   try {
-    const res = await fetch('/api/movies');
+    const res = await fetch(CLOUD_DB_URL);
     if (res.ok) {
       const json = await res.json();
-      if (json && json.success && Array.isArray(json.data) && json.data.length > 0) {
-        return json.data;
-      }
-      if (Array.isArray(json) && json.length > 0) return json;
-    }
-  } catch {}
+      if (json && json.data && Array.isArray(json.data.movies)) {
+        const cloudMovies: MovieItem[] = json.data.movies.map((m: any) => ({
+          ...m,
+          movieTitle: m.title || m.movieTitle,
+          videoData: m.videoUrl || m.videoData,
+          dialogueText: m.dialogue || m.dialogueText,
+        }));
 
-  // 2. Direct Cloud REST API fallback
-  const payload = await fetchCloudPayload();
-  return payload.movies.map((m: any) => ({
+        const map = new Map<string, MovieItem>();
+        local.forEach((m) => map.set(m.id, m));
+        cloudMovies.forEach((m) => map.set(m.id, m));
+
+        const merged = Array.from(map.values());
+        setLocalMovies(merged);
+        return merged;
+      }
+    }
+  } catch (err) {
+    console.warn('Cloud fetch movies failed, using local fallback:', err);
+  }
+
+  return local.map((m: any) => ({
     ...m,
-    title: m.title || m.movieTitle || 'Untitled Movie',
-    movieTitle: m.title || m.movieTitle || 'Untitled Movie',
-    videoUrl: m.videoUrl || m.videoData,
+    movieTitle: m.title || m.movieTitle,
     videoData: m.videoUrl || m.videoData,
-    dialogue: m.dialogue || m.dialogueText || 'Guess the movie from the clip!',
-    dialogueText: m.dialogue || m.dialogueText || 'Guess the movie from the clip!',
+    dialogueText: m.dialogue || m.dialogueText,
   }));
 };
 
 export const saveMovie = async (movie: MovieItem): Promise<string> => {
-  const payload = await fetchCloudPayload();
-  const idx = payload.movies.findIndex((m) => m.id === movie.id);
+  const clean = compactMovie(movie);
+
+  // 1. Save to LocalStorage
+  const local = getLocalMovies();
+  const idx = local.findIndex((m) => m.id === clean.id);
   if (idx >= 0) {
-    payload.movies[idx] = movie;
+    local[idx] = clean;
   } else {
-    payload.movies.push(movie);
+    local.push(clean);
   }
-  await saveCloudPayload(payload);
+  setLocalMovies(local);
 
-  // Background sync with serverless endpoint
+  // 2. Save to Cloud REST API
   try {
-    fetch('/api/movies', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(movie),
-    }).catch(() => {});
-  } catch {}
+    const res = await fetch(CLOUD_DB_URL);
+    if (res.ok) {
+      const json = await res.json();
+      const currentData = json.data || { logos: [], movies: [], settings: {} };
+      const cloudMovies: MovieItem[] = Array.isArray(currentData.movies) ? currentData.movies : [];
+      const cIdx = cloudMovies.findIndex((m) => m.id === clean.id);
+      if (cIdx >= 0) {
+        cloudMovies[cIdx] = clean;
+      } else {
+        cloudMovies.push(clean);
+      }
+      currentData.movies = cloudMovies;
 
-  return movie.id;
+      await fetch(CLOUD_DB_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'freshers_arena_master_db',
+          data: currentData,
+        }),
+      });
+    }
+  } catch (err) {
+    console.warn('Cloud save movie failed:', err);
+  }
+
+  return clean.id;
 };
 
 export const deleteMovie = async (id: string): Promise<void> => {
-  const payload = await fetchCloudPayload();
-  payload.movies = payload.movies.filter((m) => m.id !== id);
-  await saveCloudPayload(payload);
+  const local = getLocalMovies().filter((m) => m.id !== id);
+  setLocalMovies(local);
 
   try {
-    fetch(`/api/movies?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
-  } catch {}
+    const res = await fetch(CLOUD_DB_URL);
+    if (res.ok) {
+      const json = await res.json();
+      const currentData = json.data || { logos: [], movies: [], settings: {} };
+      currentData.movies = (currentData.movies || []).filter((m: any) => m.id !== id);
+      await fetch(CLOUD_DB_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'freshers_arena_master_db',
+          data: currentData,
+        }),
+      });
+    }
+  } catch (err) {
+    console.warn('Cloud delete movie failed:', err);
+  }
 };
 
 export const saveMoviesOrder = async (movies: MovieItem[]): Promise<void> => {
-  const payload = await fetchCloudPayload();
-  payload.movies = movies.map((item, idx) => ({ ...item, order: idx }));
-  await saveCloudPayload(payload);
+  const ordered = movies.map((item, idx) => ({ ...compactMovie(item), order: idx }));
+  setLocalMovies(ordered);
+
+  try {
+    const res = await fetch(CLOUD_DB_URL);
+    if (res.ok) {
+      const json = await res.json();
+      const currentData = json.data || { logos: [], movies: [], settings: {} };
+      currentData.movies = ordered;
+      await fetch(CLOUD_DB_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'freshers_arena_master_db',
+          data: currentData,
+        }),
+      });
+    }
+  } catch {}
 };
