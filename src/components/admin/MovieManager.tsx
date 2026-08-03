@@ -45,7 +45,9 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
 
   // Quick Batch Import (Folder or Multi Video Files directly to Cloudinary)
   const processBatchVideos = async (files: FileList | File[]) => {
-    const videoFiles = Array.from(files).filter((file) => file.type.startsWith('video/'));
+    const videoFiles = Array.from(files).filter(
+      (file) => file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(file.name)
+    );
     if (videoFiles.length === 0) {
       addToast('error', 'No Video Files Selected', 'Please select MP4, WEBM, or MOV video files.');
       return;
@@ -134,7 +136,8 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
   const handleFormVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      if (!file.type.startsWith('video/')) {
+      const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(file.name);
+      if (!isVideo) {
         addToast('error', 'Invalid File', 'Please select a valid MP4, WEBM, or MOV video file.');
         return;
       }

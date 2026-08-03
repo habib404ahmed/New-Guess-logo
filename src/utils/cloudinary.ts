@@ -1,9 +1,7 @@
 // Cloudinary Upload Utility for Unsigned Uploads
 // Cloud Name: vjqnrvyr
 // Upload Preset: freshers_upload
-// Endpoints:
-// - Images: https://api.cloudinary.com/v1_1/vjqnrvyr/image/upload
-// - Videos: https://api.cloudinary.com/v1_1/vjqnrvyr/video/upload
+// Endpoint: https://api.cloudinary.com/v1_1/vjqnrvyr/auto/upload
 
 export interface UploadOptions {
   onProgress?: (progressPercent: number) => void;
@@ -19,14 +17,24 @@ export const uploadToCloudinary = async (
   file: File,
   options?: UploadOptions
 ): Promise<string> => {
-  const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(file.name);
-  const resourceType = isVideo ? 'video' : 'image';
-  const targetUrl = `https://api.cloudinary.com/v1_1/vjqnrvyr/${resourceType}/upload`;
+  // Step 1: File Information
+  console.log('----------------------------------------------------');
+  console.log('📌 STEP 1: File Selected for Upload');
+  console.log('File Name:', file.name);
+  console.log('File Size:', (file.size / (1024 * 1024)).toFixed(2) + ' MB');
+  console.log('File Type:', file.type || 'Unknown (Detected by extension)');
+
+  const targetUrl = 'https://api.cloudinary.com/v1_1/vjqnrvyr/auto/upload';
+
+  // Step 2: Request Preparation
+  console.log('📌 STEP 2: Cloudinary Request Config');
+  console.log('Cloud Name:', 'vjqnrvyr');
+  console.log('Upload Preset:', 'freshers_upload');
+  console.log('Endpoint URL:', targetUrl);
 
   const formData = new FormData();
   formData.append('file', file);
   formData.append('upload_preset', 'freshers_upload');
-  formData.append('resource_type', resourceType);
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -42,23 +50,33 @@ export const uploadToCloudinary = async (
     }
 
     xhr.onload = () => {
+      console.log('📌 STEP 3 & 4: Cloudinary Response Status:', xhr.status);
+
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const response = JSON.parse(xhr.responseText);
+          console.log('Cloudinary Response JSON:', response);
+          console.log('secure_url:', response.secure_url);
+          console.log('public_id:', response.public_id);
+          console.log('asset_id:', response.asset_id);
+          console.log('resource_type:', response.resource_type);
+
           if (response.secure_url) {
-            console.log(`✅ Cloudinary ${resourceType.toUpperCase()} Upload Success! secure_url:`, response.secure_url);
+            console.log('✅ STEP 5: Upload Succeeded! Uploading metadata to Database...');
             resolve(response.secure_url);
           } else {
-            console.error('❌ Cloudinary Response Error: Missing secure_url in response payload:', response);
+            console.error('❌ Cloudinary Error: Response missing secure_url field:', response);
             reject(new Error('Cloudinary response missing secure_url field'));
           }
         } catch (err) {
-          console.error('❌ Cloudinary JSON Parsing Error:', err, xhr.responseText);
+          console.error('❌ Cloudinary JSON Parse Error:', err, xhr.responseText);
           reject(new Error('Failed to parse Cloudinary response JSON'));
         }
       } else {
-        console.error(`❌ Cloudinary ${resourceType} Upload Failed with HTTP status ${xhr.status}:`, xhr.responseText);
-        reject(new Error(`Cloudinary upload failed with HTTP status ${xhr.status}`));
+        console.error('❌ Cloudinary Upload Failed with COMPLETE Error Response Body:');
+        console.error('HTTP Status:', xhr.status);
+        console.error('Response Text:', xhr.responseText);
+        reject(new Error(`Cloudinary upload failed (HTTP ${xhr.status}): ${xhr.responseText}`));
       }
     };
 
