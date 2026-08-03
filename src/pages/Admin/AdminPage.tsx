@@ -6,7 +6,7 @@ import { FiImage, FiFilm, FiCheckSquare, FiClock, FiUpload, FiDatabase } from 'r
 
 export const AdminPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
-  const { logos, movies, loading, refresh } = useStorage();
+  const { logos, movies, refresh, setLogos, setMovies } = useStorage();
 
   const totalLogos = logos.length;
   const totalMovies = movies.length;
@@ -68,83 +68,69 @@ export const AdminPage: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-3">
                   <Button variant="neon-blue" size="md" leftIcon={<FiUpload />} onClick={() => setActiveTab('logos')}>
-                    Manage Logos
+                    Upload Logos
                   </Button>
                   <Button variant="neon-purple" size="md" leftIcon={<FiUpload />} onClick={() => setActiveTab('movies')}>
-                    Manage Movies
+                    Upload Movies
                   </Button>
                 </div>
               </div>
 
-              {/* 4 DASHBOARD STAT CARDS */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {/* Stat 1: Total Logos */}
-                <Card variant="solid" hoverEffect={false} className="p-6 bg-slate-900 border-slate-800">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Logos</span>
-                    <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                      <FiImage className="w-5 h-5" />
+              {/* Stat Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <Card variant="glass" className="border-cyan-500/20">
+                  <CardBody className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                      <FiImage className="w-6 h-6" />
                     </div>
-                  </div>
-                  <div className="mt-4">
-                    <span className="text-3xl font-black text-slate-100 font-mono">
-                      {loading ? '...' : totalLogos}
-                    </span>
-                    <p className="text-xs text-slate-400 mt-1">Logo challenge deck</p>
-                  </div>
+                    <div>
+                      <p className="text-xs font-mono text-slate-400 uppercase tracking-wider">Logos Loaded</p>
+                      <h3 className="text-2xl font-black text-slate-100">{totalLogos}</h3>
+                    </div>
+                  </CardBody>
                 </Card>
 
-                {/* Stat 2: Total Movies */}
-                <Card variant="solid" hoverEffect={false} className="p-6 bg-slate-900 border-slate-800">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Movies</span>
-                    <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                      <FiFilm className="w-5 h-5" />
+                <Card variant="glass" className="border-purple-500/20">
+                  <CardBody className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                      <FiFilm className="w-6 h-6" />
                     </div>
-                  </div>
-                  <div className="mt-4">
-                    <span className="text-3xl font-black text-slate-100 font-mono">
-                      {loading ? '...' : totalMovies}
-                    </span>
-                    <p className="text-xs text-slate-400 mt-1">Movie video deck</p>
-                  </div>
+                    <div>
+                      <p className="text-xs font-mono text-slate-400 uppercase tracking-wider">Movies Loaded</p>
+                      <h3 className="text-2xl font-black text-slate-100">{totalMovies}</h3>
+                    </div>
+                  </CardBody>
                 </Card>
 
-                {/* Stat 3: Ready Questions */}
-                <Card variant="solid" hoverEffect={false} className="p-6 bg-slate-900 border-slate-800">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Ready Questions</span>
-                    <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                      <FiCheckSquare className="w-5 h-5" />
+                <Card variant="glass" className="border-emerald-500/20">
+                  <CardBody className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                      <FiCheckSquare className="w-6 h-6" />
                     </div>
-                  </div>
-                  <div className="mt-4">
-                    <span className="text-3xl font-black text-emerald-400 font-mono">
-                      {loading ? '...' : readyQuestions}
-                    </span>
-                    <p className="text-xs text-slate-400 mt-1">Combined total items</p>
-                  </div>
+                    <div>
+                      <p className="text-xs font-mono text-slate-400 uppercase tracking-wider">Total Questions</p>
+                      <h3 className="text-2xl font-black text-slate-100">{readyQuestions}</h3>
+                    </div>
+                  </CardBody>
                 </Card>
 
-                {/* Stat 4: Last Saved */}
-                <Card variant="solid" hoverEffect={false} className="p-6 bg-slate-900 border-slate-800">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Last Saved</span>
-                    <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                      <FiClock className="w-5 h-5" />
+                <Card variant="glass" className="border-amber-500/20">
+                  <CardBody className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                      <FiClock className="w-6 h-6" />
                     </div>
-                  </div>
-                  <div className="mt-4">
-                    <span className="text-xs font-bold font-mono text-amber-300 block truncate" title={formattedLastSaved}>
-                      {loading ? '...' : formattedLastSaved}
-                    </span>
-                    <p className="text-xs text-slate-400 mt-1">Storage sync status</p>
-                  </div>
+                    <div>
+                      <p className="text-xs font-mono text-slate-400 uppercase tracking-wider">Last Sync</p>
+                      <h3 className="text-xs font-mono text-slate-200 mt-1 truncate max-w-[140px]" title={formattedLastSaved}>
+                        {formattedLastSaved}
+                      </h3>
+                    </div>
+                  </CardBody>
                 </Card>
               </div>
 
-              {/* Action Quick Links */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Status Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <Card variant="solid" hoverEffect={false} className="bg-slate-900 border-slate-800">
                   <CardHeader>
                     <h3 className="font-bold text-lg text-slate-100 flex items-center gap-2">
@@ -182,12 +168,12 @@ export const AdminPage: React.FC = () => {
 
           {/* LOGO MANAGER TAB */}
           {activeTab === 'logos' && (
-            <LogoManager logos={logos} onRefresh={refresh} />
+            <LogoManager logos={logos} setLogos={setLogos} onRefresh={refresh} />
           )}
 
           {/* MOVIE MANAGER TAB */}
           {activeTab === 'movies' && (
-            <MovieManager movies={movies} onRefresh={refresh} />
+            <MovieManager movies={movies} setMovies={setMovies} onRefresh={refresh} />
           )}
 
           {activeTab === 'settings' && (
@@ -203,3 +189,4 @@ export const AdminPage: React.FC = () => {
 };
 
 export default AdminPage;
+

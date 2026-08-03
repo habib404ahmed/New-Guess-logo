@@ -8,10 +8,11 @@ import { FiFilm, FiPlus, FiFolderPlus, FiTrash2, FiEdit2, FiEye, FiArrowUp, FiAr
 
 export interface MovieManagerProps {
   movies: MovieItem[];
+  setMovies?: React.Dispatch<React.SetStateAction<MovieItem[]>>;
   onRefresh: () => Promise<void> | void;
 }
 
-export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh }) => {
+export const MovieManager: React.FC<MovieManagerProps> = ({ movies, setMovies, onRefresh }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
   const [previewMovie, setPreviewMovie] = useState<MovieItem | null>(null);
@@ -90,6 +91,15 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
           };
 
           await saveMovie(newMovie);
+
+          // Update local state INSTANTLY (0ms latency)
+          if (setMovies) {
+            setMovies((prev) => {
+              const exists = prev.some((m) => m.id === newMovie.id);
+              return exists ? prev.map((m) => (m.id === newMovie.id ? newMovie : m)) : [...prev, newMovie];
+            });
+          }
+
           importedCount++;
         } catch (uploadErr) {
           console.error(`Failed to upload video ${file.name}:`, uploadErr);
@@ -98,8 +108,7 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
       }
 
       if (importedCount > 0) {
-        // Await state refresh FIRST so that movies state & cards update before toast renders
-        await onRefresh();
+        onRefresh();
         addToast(
           'success',
           'Cloudinary Video Upload Complete',
@@ -219,11 +228,17 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
       // 2. Save to Database
       await saveMovie(movieItem);
 
-      // Await refresh FIRST so state updates before dialog closes & toast triggers
-      await onRefresh();
+      // Update local state INSTANTLY (0ms latency)
+      if (setMovies) {
+        setMovies((prev) => {
+          const exists = prev.some((m) => m.id === movieItem.id);
+          return exists ? prev.map((m) => (m.id === movieItem.id ? movieItem : m)) : [...prev, movieItem];
+        });
+      }
 
       addToast('success', editingMovie ? 'Movie Updated' : 'Movie Created', `Saved "${movieItem.title}" to Database.`);
       setIsAddDialogOpen(false);
+      onRefresh();
     } catch (err) {
       console.error('Failed to save movie form:', err);
       addToast('error', 'Save Failed', 'Could not upload video or save movie to Database.');
@@ -238,8 +253,11 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
   const handleDelete = async (id: string, titleStr: string) => {
     try {
       await deleteMovie(id);
-      await onRefresh();
+      if (setMovies) {
+        setMovies((prev) => prev.filter((m) => m.id !== id));
+      }
       addToast('info', 'Movie Deleted', `Removed "${titleStr}" from Database.`);
+      onRefresh();
     } catch (err) {
       console.error(err);
       addToast('error', 'Delete Failed', 'Could not remove movie.');
@@ -257,8 +275,9 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
       reordered[index] = reordered[targetIndex];
       reordered[targetIndex] = temp;
 
+      if (setMovies) setMovies(reordered);
       await saveMoviesOrder(reordered);
-      await onRefresh();
+      onRefresh();
     } catch (err) {
       console.error(err);
       addToast('error', 'Reorder Failed', 'Could not save new movie order.');
