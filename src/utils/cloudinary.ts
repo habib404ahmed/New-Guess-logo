@@ -1,7 +1,9 @@
 // Cloudinary Upload Utility for Unsigned Uploads
 // Cloud Name: vjqnrvyr
 // Upload Preset: freshers_upload
-// Endpoint: https://api.cloudinary.com/v1_1/vjqnrvyr/auto/upload
+// Endpoints:
+//   Videos: https://api.cloudinary.com/v1_1/vjqnrvyr/video/upload
+//   Images: https://api.cloudinary.com/v1_1/vjqnrvyr/image/upload
 
 export interface UploadOptions {
   onProgress?: (progressPercent: number) => void;
@@ -18,14 +20,17 @@ export const uploadToCloudinary = async (
   options?: UploadOptions
 ): Promise<string> => {
   console.log('----------------------------------------------------');
-  console.log('Uploading logo:', file);
+  console.log('Uploading file:', file.name);
   console.log('File type:', file.type);
   console.log('File size:', file.size);
 
-  const targetUrl = 'https://api.cloudinary.com/v1_1/vjqnrvyr/auto/upload';
+  const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(file.name);
+  const resourceType = isVideo ? 'video' : 'auto';
+  const targetUrl = `https://api.cloudinary.com/v1_1/vjqnrvyr/${resourceType}/upload`;
 
   console.log('Cloud Name:', 'vjqnrvyr');
   console.log('Upload Preset:', 'freshers_upload');
+  console.log('Resource Type:', resourceType);
   console.log('Endpoint URL:', targetUrl);
 
   const formData = new FormData();
