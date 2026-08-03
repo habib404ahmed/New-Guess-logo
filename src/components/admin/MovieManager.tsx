@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Button, Input, Textarea, SearchInput, Dialog, ToastContainer, type ToastMessage } from '../shared';
-import { saveMovie, deleteMovie, saveMoviesOrder } from '../../storage/db';
+import { saveMovie, deleteMovie, saveMoviesOrder, getAllMovies } from '../../storage/db';
 import type { MovieItem } from '../../types';
 import { generateId } from '../../utils/helpers';
 import { uploadToCloudinary } from '../../utils/cloudinary';
@@ -67,7 +67,7 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
         setUploadStatusText(`Uploading video ${i + 1}/${videoFiles.length}: "${file.name}" to Cloudinary...`);
 
         try {
-          // 1. Upload video to Cloudinary
+          // STEP 1: Upload video to Cloudinary
           const secureUrl = await uploadToCloudinary(file, {
             onProgress: (percent) => {
               const totalPercent = Math.round(((i + percent / 100) / videoFiles.length) * 100);
@@ -75,11 +75,11 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
             },
           });
 
-          // 2. Save metadata + Cloudinary URL to MongoDB Atlas
+          // STEP 2: Save metadata + Cloudinary URL to MongoDB Atlas / Cloud DB
           const newMovie: MovieItem = {
             id: generateId(),
             title: cleanTitle,
-            videoData: secureUrl, // Cloudinary permanent HTTPS URL
+            videoData: secureUrl,
             dialogue: `Guess the iconic movie for clip: "${cleanTitle}"`,
             hint: 'Listen closely to the dialogue!',
             order: movies.length + importedCount,
@@ -87,24 +87,36 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
           };
 
           await saveMovie(newMovie);
-          importedCount++;
+
+          // STEP 3: Confirm inserted document via GET /api/movies
+          const verifiedMovies = await getAllMovies();
+          const exists = verifiedMovies.some((m) => m.id === newMovie.id || m.title === newMovie.title);
+
+          if (exists) {
+            console.log('✅ STEP 3 Confirmed: Inserted movie exists in GET /api/movies!');
+            importedCount++;
+          } else {
+            console.error('❌ STEP 3 Failed: GET /api/movies did not confirm movie:', newMovie.id);
+            failedCount++;
+          }
         } catch (uploadErr) {
-          console.error(`Failed to upload video ${file.name} to Cloudinary:`, uploadErr);
+          console.error(`Failed to upload video ${file.name}:`, uploadErr);
           failedCount++;
         }
       }
 
+      // STEP 4: Update React state and display success toast ONLY after verification
       if (importedCount > 0) {
         addToast(
           'success',
           'Cloudinary Video Upload Complete',
-          `Successfully uploaded ${importedCount} video clip(s) to Cloudinary & MongoDB Atlas.`
+          `Successfully uploaded and verified ${importedCount} video clip(s) in Database.`
         );
         onRefresh();
       }
 
       if (failedCount > 0) {
-        addToast('error', 'Upload Errors Encountered', `${failedCount} video(s) failed to upload.`);
+        addToast('error', 'Upload Errors Encountered', `${failedCount} video(s) failed to verify.`);
       }
     } catch (err) {
       console.error('Failed batch video upload:', err);
@@ -191,7 +203,7 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
 
       let videoUrl = existingVideoUrl;
 
-      // If a new video file was selected, upload it to Cloudinary
+      // STEP 1: Upload to Cloudinary if new file selected
       if (selectedFile) {
         setUploadStatusText(`Uploading video "${selectedFile.name}" to Cloudinary...`);
         videoUrl = await uploadToCloudinary(selectedFile, {
@@ -204,18 +216,29 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
         title: title.trim(),
         dialogue: dialogue.trim() || 'Guess the movie from the clip!',
         hint: hint.trim() || undefined,
-        videoData: videoUrl, // Permanent Cloudinary HTTPS URL
+        videoData: videoUrl,
         order: editingMovie ? editingMovie.order : movies.length,
         createdAt: editingMovie ? editingMovie.createdAt : Date.now(),
       };
 
+      // STEP 2: POST /api/movies
       await saveMovie(movieItem);
-      addToast('success', editingMovie ? 'Movie Updated' : 'Movie Created', `Saved "${movieItem.title}" to MongoDB Atlas.`);
+
+      // STEP 3: Verify GET /api/movies returns inserted document
+      const verifiedMovies = await getAllMovies();
+      const exists = verifiedMovies.some((m) => m.id === movieItem.id || m.title === movieItem.title);
+
+      if (!exists) {
+        throw new Error('Database verification (GET /api/movies) did not return the inserted movie.');
+      }
+
+      // STEP 4: Toast & State refresh
+      addToast('success', editingMovie ? 'Movie Updated' : 'Movie Created', `Saved "${movieItem.title}" to Database.`);
       setIsAddDialogOpen(false);
       onRefresh();
     } catch (err) {
-      console.error(err);
-      addToast('error', 'Save Failed', 'Could not upload video or save movie to MongoDB Atlas.');
+      console.error('Failed to save movie form:', err);
+      addToast('error', 'Save Failed', 'Could not upload video or save movie to Database.');
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
@@ -223,11 +246,11 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
     }
   };
 
-  // Delete Movie from MongoDB Atlas
+  // Delete Movie from Database
   const handleDelete = async (id: string, titleStr: string) => {
     try {
       await deleteMovie(id);
-      addToast('info', 'Movie Deleted', `Removed "${titleStr}" from MongoDB Atlas.`);
+      addToast('info', 'Movie Deleted', `Removed "${titleStr}" from Database.`);
       onRefresh();
     } catch (err) {
       console.error(err);
@@ -235,7 +258,7 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
     }
   };
 
-  // Reorder Movie items in MongoDB Atlas
+  // Reorder Movie items in Database
   const handleReorder = async (index: number, direction: 'up' | 'down') => {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= movies.length) return;
@@ -254,8 +277,11 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
     }
   };
 
-  // Filtered Movies
+  // Filtered Movies & State Trace Logging
+  console.log('Movies from API:', movies);
+  console.log('Movie Count:', movies.length);
   console.log('Movie state:', movies);
+
   const filteredMovies = movies.filter((m) => {
     const titleStr = m.title || (m as any).movieTitle || '';
     const dialogueStr = m.dialogue || (m as any).dialogueText || '';
@@ -378,7 +404,7 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
           <FiFilm className="w-12 h-12 text-slate-600 mx-auto mb-3" />
           <h4 className="text-base font-bold text-slate-300">No Movies Available</h4>
           <p className="text-xs text-slate-500 mt-1">
-            {searchQuery ? 'No movies match your search.' : 'Click "Add Movie Entry" or drop video files to upload to Cloudinary & MongoDB Atlas.'}
+            {searchQuery ? 'No movies match your search.' : 'Click "Add Movie Entry" or drop video files to upload to Cloudinary & Database.'}
           </p>
         </div>
       ) : (
@@ -418,7 +444,7 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
                 onClick={() => setPreviewMovie(movie)}
                 className="w-32 h-20 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-center relative overflow-hidden shrink-0 cursor-pointer group"
               >
-                <video src={movie.videoData} className="w-full h-full object-cover" muted preload="metadata" />
+                <video src={movie.videoData || (movie as any).videoUrl} className="w-full h-full object-cover" muted preload="metadata" />
                 <div className="absolute inset-0 bg-slate-950/60 flex items-center justify-center group-hover:bg-slate-950/40 transition-colors">
                   <FiEye className="w-6 h-6 text-purple-400" />
                 </div>
@@ -426,9 +452,9 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
 
               {/* Info Details */}
               <div className="flex-1 min-w-0">
-                <h4 className="text-base font-bold text-slate-100 truncate">{movie.title}</h4>
+                <h4 className="text-base font-bold text-slate-100 truncate">{movie.title || (movie as any).movieTitle}</h4>
                 <p className="text-xs text-purple-300 italic mt-0.5 line-clamp-1">
-                  "{movie.dialogue}"
+                  "{movie.dialogue || (movie as any).dialogueText}"
                 </p>
                 {movie.hint && (
                   <p className="text-[11px] text-slate-400 mt-1 font-mono">
@@ -459,7 +485,7 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
                   size="sm"
                   variant="danger"
                   leftIcon={<FiTrash2 />}
-                  onClick={() => handleDelete(movie.id, movie.title)}
+                  onClick={() => handleDelete(movie.id, movie.title || (movie as any).movieTitle)}
                 >
                   Delete
                 </Button>
@@ -543,14 +569,14 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
       <Dialog
         isOpen={!!previewMovie}
         onClose={() => setPreviewMovie(null)}
-        title={previewMovie?.title || 'Video Preview'}
+        title={previewMovie?.title || (previewMovie as any)?.movieTitle || 'Video Preview'}
         maxWidth="xl"
       >
         {previewMovie && (
           <div className="space-y-4">
             <div className="w-full bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-2xl">
               <video
-                src={previewMovie.videoData}
+                src={previewMovie.videoData || (previewMovie as any)?.videoUrl}
                 controls
                 autoPlay
                 preload="metadata"
@@ -558,13 +584,13 @@ export const MovieManager: React.FC<MovieManagerProps> = ({ movies, onRefresh })
               />
             </div>
             <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-800/80 space-y-2">
-              <h4 className="text-lg font-bold text-slate-100">{previewMovie.title}</h4>
-              <p className="text-sm text-purple-300 italic">"{previewMovie.dialogue}"</p>
+              <h4 className="text-lg font-bold text-slate-100">{previewMovie.title || (previewMovie as any)?.movieTitle}</h4>
+              <p className="text-sm text-purple-300 italic">"{previewMovie.dialogue || (previewMovie as any)?.dialogueText}"</p>
               {previewMovie.hint && (
                 <p className="text-xs text-slate-400 font-mono">Hint: {previewMovie.hint}</p>
               )}
-              <p className="text-[11px] font-mono text-cyan-400 truncate" title={previewMovie.videoData}>
-                Cloudinary CDN: {previewMovie.videoData}
+              <p className="text-[11px] font-mono text-cyan-400 truncate" title={previewMovie.videoData || (previewMovie as any)?.videoUrl}>
+                Cloudinary CDN: {previewMovie.videoData || (previewMovie as any)?.videoUrl}
               </p>
             </div>
           </div>
