@@ -36,7 +36,9 @@ export const LogoManager: React.FC<LogoManagerProps> = ({ logos, onRefresh }) =>
 
   // Process files: Upload directly to Cloudinary -> Save Metadata to MongoDB Atlas
   const processFiles = async (files: FileList | File[]) => {
-    const fileArray = Array.from(files).filter((file) => file.type.startsWith('image/'));
+    const fileArray = Array.from(files).filter(
+      (file) => file.type.startsWith('image/') || /\.(png|jpe?g|webp|svg|gif|bmp|ico)$/i.test(file.name)
+    );
     if (fileArray.length === 0) {
       addToast('error', 'No Image Files Selected', 'Please select PNG, JPG, WEBP, or SVG image files.');
       return;
