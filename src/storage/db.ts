@@ -33,11 +33,67 @@ const clearLegacyMovieKeys = () => {
   });
 };
 
+// LocalStorage keys for tracking deleted items to prevent CDN cache resurrection
+const DELETED_LOGOS_KEY = 'freshers_arena_deleted_logos_v5';
+const DELETED_MOVIES_KEY = 'freshers_arena_deleted_movies_v5';
+
+const getDeletedLogoIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(DELETED_LOGOS_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+};
+
+const addDeletedLogoId = (id: string) => {
+  try {
+    const ids = getDeletedLogoIds();
+    ids.add(id);
+    localStorage.setItem(DELETED_LOGOS_KEY, JSON.stringify(Array.from(ids)));
+  } catch {}
+};
+
+const removeDeletedLogoId = (id: string) => {
+  try {
+    const ids = getDeletedLogoIds();
+    ids.delete(id);
+    localStorage.setItem(DELETED_LOGOS_KEY, JSON.stringify(Array.from(ids)));
+  } catch {}
+};
+
+const getDeletedMovieIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(DELETED_MOVIES_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+};
+
+const addDeletedMovieId = (id: string) => {
+  try {
+    const ids = getDeletedMovieIds();
+    ids.add(id);
+    localStorage.setItem(DELETED_MOVIES_KEY, JSON.stringify(Array.from(ids)));
+  } catch {}
+};
+
+const removeDeletedMovieId = (id: string) => {
+  try {
+    const ids = getDeletedMovieIds();
+    ids.delete(id);
+    localStorage.setItem(DELETED_MOVIES_KEY, JSON.stringify(Array.from(ids)));
+  } catch {}
+};
+
 // LocalStorage helpers
 const getLocalLogos = (): LogoItem[] => {
   try {
     const raw = localStorage.getItem(LOGOS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const items: LogoItem[] = raw ? JSON.parse(raw) : [];
+    const deletedIds = getDeletedLogoIds();
+    return items.filter((item) => !deletedIds.has(item.id));
   } catch {
     return [];
   }
@@ -45,7 +101,9 @@ const getLocalLogos = (): LogoItem[] => {
 
 const setLocalLogos = (items: LogoItem[]) => {
   try {
-    localStorage.setItem(LOGOS_STORAGE_KEY, JSON.stringify(items));
+    const deletedIds = getDeletedLogoIds();
+    const cleanItems = items.filter((item) => !deletedIds.has(item.id));
+    localStorage.setItem(LOGOS_STORAGE_KEY, JSON.stringify(cleanItems));
   } catch {}
 };
 
@@ -53,7 +111,9 @@ const getLocalMovies = (): MovieItem[] => {
   clearLegacyMovieKeys();
   try {
     const raw = localStorage.getItem(MOVIES_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const items: MovieItem[] = raw ? JSON.parse(raw) : [];
+    const deletedIds = getDeletedMovieIds();
+    return items.filter((item) => !deletedIds.has(item.id));
   } catch {
     return [];
   }
@@ -61,7 +121,9 @@ const getLocalMovies = (): MovieItem[] => {
 
 const setLocalMovies = (items: MovieItem[]) => {
   try {
-    localStorage.setItem(MOVIES_STORAGE_KEY, JSON.stringify(items));
+    const deletedIds = getDeletedMovieIds();
+    const cleanItems = items.filter((item) => !deletedIds.has(item.id));
+    localStorage.setItem(MOVIES_STORAGE_KEY, JSON.stringify(cleanItems));
   } catch {}
 };
 
@@ -93,13 +155,23 @@ const compactLogo = (l: LogoItem): LogoItem => {
 // Helper: Fetch cloud DB payload from Cloudinary CDN
 const fetchCloudPayload = async (): Promise<{ logos: LogoItem[]; movies: MovieItem[]; settings: any }> => {
   try {
-    const res = await fetch(`${CLOUDINARY_RAW_FETCH_URL}?t=${Date.now()}`);
+    const res = await fetch(`${CLOUDINARY_RAW_FETCH_URL}?t=${Date.now()}`, { cache: 'no-store' });
     if (res.ok) {
       const json = await res.json();
       if (json && typeof json === 'object') {
+        const deletedLogoIds = getDeletedLogoIds();
+        const deletedMovieIds = getDeletedMovieIds();
+
+        const cloudLogos = (Array.isArray(json.logos) ? json.logos : []).filter(
+          (l: any) => l && l.id && !deletedLogoIds.has(l.id)
+        );
+        const cloudMovies = (Array.isArray(json.movies) ? json.movies : []).filter(
+          (m: any) => m && m.id && !deletedMovieIds.has(m.id)
+        );
+
         return {
-          logos: Array.isArray(json.logos) ? json.logos : [],
-          movies: Array.isArray(json.movies) ? json.movies : [],
+          logos: cloudLogos,
+          movies: cloudMovies,
           settings: json.settings || {},
         };
       }
@@ -113,11 +185,21 @@ const fetchCloudPayload = async (): Promise<{ logos: LogoItem[]; movies: MovieIt
 // Helper: Save cloud DB payload to Cloudinary CDN
 const saveCloudPayload = async (payload: { logos: LogoItem[]; movies: MovieItem[]; settings: any }): Promise<boolean> => {
   try {
-    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+    const deletedLogoIds = getDeletedLogoIds();
+    const deletedMovieIds = getDeletedMovieIds();
+
+    const cleanPayload = {
+      logos: payload.logos.filter((l) => l && l.id && !deletedLogoIds.has(l.id)),
+      movies: payload.movies.filter((m) => m && m.id && !deletedMovieIds.has(m.id)),
+      settings: payload.settings || {},
+    };
+
+    const blob = new Blob([JSON.stringify(cleanPayload)], { type: 'application/json' });
     const formData = new FormData();
     formData.append('file', blob, 'freshers_master_db.json');
     formData.append('upload_preset', 'freshers_upload');
     formData.append('public_id', 'freshers_master_db_json');
+    formData.append('invalidate', 'true');
 
     const res = await fetch(CLOUDINARY_RAW_UPLOAD_URL, {
       method: 'POST',
@@ -149,7 +231,8 @@ export const getAllLogos = async (): Promise<LogoItem[]> => {
     cloudLogos.forEach((l) => map.set(l.id, l));
     local.forEach((l) => map.set(l.id, l));
 
-    const merged = Array.from(map.values());
+    const deletedIds = getDeletedLogoIds();
+    const merged = Array.from(map.values()).filter((l) => !deletedIds.has(l.id));
     setLocalLogos(merged);
     return merged;
   } catch {
@@ -158,6 +241,7 @@ export const getAllLogos = async (): Promise<LogoItem[]> => {
 };
 
 export const saveLogo = async (logo: LogoItem): Promise<string> => {
+  removeDeletedLogoId(logo.id);
   const clean = compactLogo(logo);
 
   const local = getLocalLogos();
@@ -182,6 +266,8 @@ export const saveLogo = async (logo: LogoItem): Promise<string> => {
 };
 
 export const deleteLogo = async (id: string): Promise<void> => {
+  addDeletedLogoId(id);
+
   const local = getLocalLogos().filter((l) => l.id !== id);
   setLocalLogos(local);
 
@@ -219,7 +305,8 @@ export const getAllMovies = async (): Promise<MovieItem[]> => {
     cloudMovies.forEach((m) => map.set(m.id, m));
     local.forEach((m) => map.set(m.id, m));
 
-    const merged = Array.from(map.values());
+    const deletedIds = getDeletedMovieIds();
+    const merged = Array.from(map.values()).filter((m) => !deletedIds.has(m.id));
     setLocalMovies(merged);
     return merged;
   } catch {
@@ -228,6 +315,7 @@ export const getAllMovies = async (): Promise<MovieItem[]> => {
 };
 
 export const saveMovie = async (movie: MovieItem): Promise<string> => {
+  removeDeletedMovieId(movie.id);
   const clean = compactMovie(movie);
 
   // 1. Save to LocalStorage
@@ -259,6 +347,8 @@ export const saveMovie = async (movie: MovieItem): Promise<string> => {
 };
 
 export const deleteMovie = async (id: string): Promise<void> => {
+  addDeletedMovieId(id);
+
   ALL_MOVIE_KEYS.forEach((key) => {
     try {
       const raw = localStorage.getItem(key);
@@ -285,3 +375,4 @@ export const saveMoviesOrder = async (movies: MovieItem[]): Promise<void> => {
   payload.movies = ordered;
   await saveCloudPayload(payload);
 };
+
