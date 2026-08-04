@@ -152,8 +152,8 @@ export const LogoChallengePage: React.FC = () => {
               >
                 <div className="relative w-full max-w-2xl h-[360px] sm:h-[450px] bg-slate-900/70 border-2 border-cyan-500/40 rounded-3xl p-8 flex items-center justify-center backdrop-blur-xl shadow-[0_0_50px_rgba(0,240,255,0.2)] overflow-hidden group">
                   <img
-                    src={currentLogo.imageData}
-                    alt="Guess the logo"
+                    src={currentLogo.imageUrl || currentLogo.imageData}
+                    alt={currentLogo.title || currentLogo.name || 'Guess the logo'}
                     className={`max-h-full max-w-full object-contain transition-all duration-500 ${
                       isRevealed
                         ? 'scale-105 drop-shadow-[0_0_35px_rgba(0,240,255,0.6)]'

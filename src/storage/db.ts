@@ -76,13 +76,19 @@ const compactMovie = (m: MovieItem): MovieItem => ({
   createdAt: m.createdAt || Date.now(),
 });
 
-const compactLogo = (l: LogoItem): LogoItem => ({
-  id: l.id,
-  title: (l.title || l.name || 'Untitled Logo').trim(),
-  imageUrl: (l.imageUrl || l.imageData || '').trim(),
-  order: l.order ?? 0,
-  createdAt: l.createdAt || Date.now(),
-});
+const compactLogo = (l: LogoItem): LogoItem => {
+  const url = (l.imageUrl || l.imageData || '').trim();
+  const nameStr = (l.title || l.name || 'Untitled Logo').trim();
+  return {
+    id: l.id,
+    title: nameStr,
+    name: nameStr,
+    imageUrl: url,
+    imageData: url,
+    order: l.order ?? 0,
+    createdAt: l.createdAt || Date.now(),
+  };
+};
 
 // Helper: Fetch cloud DB payload from Cloudinary CDN
 const fetchCloudPayload = async (): Promise<{ logos: LogoItem[]; movies: MovieItem[]; settings: any }> => {
